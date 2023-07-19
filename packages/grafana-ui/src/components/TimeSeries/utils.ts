@@ -87,6 +87,7 @@ export const preparePlotConfigBuilder: UPlotConfigPrepFn<{
   renderers,
   tweakScale = (opts) => opts,
   tweakAxis = (opts) => opts,
+  eventsScope = '__global_',
 }) => {
   const builder = new UPlotConfigBuilder(timeZones[0]);
 
@@ -104,8 +105,6 @@ export const preparePlotConfigBuilder: UPlotConfigPrepFn<{
   if (!xField) {
     return builder; // empty frame with no options
   }
-
-  let seriesIndex = 0;
 
   const xScaleKey = 'x';
   let xScaleUnit = '_x';
@@ -183,6 +182,7 @@ export const preparePlotConfigBuilder: UPlotConfigPrepFn<{
       scaleKey: xScaleKey,
       orientation: ScaleOrientation.Horizontal,
       direction: ScaleDirection.Right,
+      range: (u, dataMin, dataMax) => [xField.config.min ?? dataMin, xField.config.max ?? dataMax],
     });
 
     builder.addAxis({
@@ -192,6 +192,7 @@ export const preparePlotConfigBuilder: UPlotConfigPrepFn<{
       label: xField.config.custom?.axisLabel,
       theme,
       grid: { show: xField.config.custom?.axisGridShow },
+      formatValue: (v, decimals) => formattedValueToString(xField.display!(v, decimals)),
     });
   }
 
@@ -216,9 +217,6 @@ export const preparePlotConfigBuilder: UPlotConfigPrepFn<{
     if (field === xField || field.type !== FieldType.number) {
       continue;
     }
-
-    // TODO: skip this for fields with custom renderers?
-    field.state!.seriesIndex = seriesIndex++;
 
     let fmt = field.display ?? defaultFormatter;
     if (field.config.custom?.stacking?.mode === StackingMode.Percent) {
@@ -601,9 +599,10 @@ export const preparePlotConfigBuilder: UPlotConfigPrepFn<{
       },
       data: frame,
     };
+
     const hoverEvent = new DataHoverEvent(payload);
     cursor.sync = {
-      key: '__global_',
+      key: eventsScope,
       filters: {
         pub: (type: string, src: uPlot, x: number, y: number, w: number, h: number, dataIdx: number) => {
           if (sync && sync() === DashboardCursorSync.Off) {
