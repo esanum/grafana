@@ -1,5 +1,5 @@
 import { css } from '@emotion/css';
-import React, { MouseEvent } from 'react';
+import { MouseEvent } from 'react';
 
 import { AnnotationEvent, DateTimeInput, GrafanaTheme2, PanelProps } from '@grafana/data';
 import { Card, TagList, Tooltip, RenderUserContentAsHTML, useStyles2 } from '@grafana/ui';
@@ -86,7 +86,7 @@ const Avatar = ({ onClick, avatarUrl, login, email }: AvatarProps) => {
 
   return (
     <Tooltip content={tooltipContent} theme="info" placement="top">
-      <button onClick={onAvatarClick} className={styles.avatar} aria-label={`Created by ${email}`}>
+      <button onClick={onAvatarClick} className={styles.avatar}>
         <img src={avatarUrl} alt="avatar icon" />
       </button>
     </Tooltip>

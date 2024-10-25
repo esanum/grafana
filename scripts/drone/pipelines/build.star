@@ -2,15 +2,11 @@
 
 load(
     "scripts/drone/steps/lib.star",
-    "build_backend_step",
-    "build_docker_images_step",
     "build_frontend_package_step",
-    "build_frontend_step",
-    "build_plugins_step",
     "build_storybook_step",
+    "build_test_plugins_step",
     "cloud_plugins_e2e_tests_step",
     "compile_build_cmd",
-    "copy_packages_for_docker_step",
     "download_grabpl_step",
     "e2e_tests_artifacts",
     "e2e_tests_step",
@@ -18,19 +14,30 @@ load(
     "frontend_metrics_step",
     "grafana_server_step",
     "identify_runner_step",
-    "package_step",
+    "playwright_e2e_report_post_link",
+    "playwright_e2e_report_upload",
+    "playwright_e2e_tests_step",
     "publish_images_step",
     "release_canary_npm_packages_step",
     "store_storybook_step",
     "test_a11y_frontend_step",
     "trigger_oss",
-    "trigger_test_release",
+    "update_package_json_version",
     "upload_cdn_step",
     "upload_packages_step",
     "verify_gen_cue_step",
     "verify_gen_jsonnet_step",
     "wire_install_step",
     "yarn_install_step",
+)
+load(
+    "scripts/drone/steps/rgm.star",
+    "rgm_artifacts_step",
+    "rgm_build_docker_step",
+)
+load(
+    "scripts/drone/utils/images.star",
+    "images",
 )
 load(
     "scripts/drone/utils/utils.star",
@@ -43,7 +50,7 @@ def build_e2e(trigger, ver_mode):
 
     Args:
       trigger: controls which events can trigger the pipeline execution.
-      ver_mode: used in the naming of the pipeline.
+      ver_mode: used in the naming of the pipeline. Either 'pr' or 'main'.
 
     Returns:
       Drone pipeline.
@@ -65,31 +72,48 @@ def build_e2e(trigger, ver_mode):
     if ver_mode == "pr":
         build_steps.extend(
             [
-                trigger_test_release(),
+                build_frontend_package_step(),
                 enterprise_downstream_step(ver_mode = ver_mode),
+                rgm_artifacts_step(artifacts = ["targz:grafana:linux/amd64", "targz:grafana:linux/arm64", "targz:grafana:linux/arm/v7"], file = "packages.txt"),
             ],
         )
+    else:
+        build_steps.extend([
+            update_package_json_version(),
+            build_frontend_package_step(depends_on = ["update-package-json-version"]),
+            rgm_artifacts_step(
+                artifacts = [
+                    "targz:grafana:linux/amd64",
+                    "targz:grafana:linux/arm64",
+                    "targz:grafana:linux/arm/v7",
+                ],
+                depends_on = ["update-package-json-version"],
+                file = "packages.txt",
+            ),
+        ])
 
     build_steps.extend(
         [
-            build_backend_step(ver_mode = ver_mode),
-            build_frontend_step(ver_mode = ver_mode),
-            build_frontend_package_step(ver_mode = ver_mode),
-            build_plugins_step(ver_mode = ver_mode),
-            package_step(ver_mode = ver_mode),
+            build_test_plugins_step(),
             grafana_server_step(),
             e2e_tests_step("dashboards-suite"),
+            e2e_tests_step("old-arch/dashboards-suite"),
             e2e_tests_step("smoke-tests-suite"),
+            e2e_tests_step("old-arch/smoke-tests-suite"),
             e2e_tests_step("panels-suite"),
+            e2e_tests_step("old-arch/panels-suite"),
             e2e_tests_step("various-suite"),
+            e2e_tests_step("old-arch/various-suite"),
             cloud_plugins_e2e_tests_step(
                 "cloud-plugins-suite",
                 cloud = "azure",
                 trigger = trigger_oss,
             ),
+            playwright_e2e_tests_step(),
+            playwright_e2e_report_upload(),
+            playwright_e2e_report_post_link(),
             e2e_tests_artifacts(),
             build_storybook_step(ver_mode = ver_mode),
-            copy_packages_for_docker_step(),
             test_a11y_frontend_step(ver_mode = ver_mode),
         ],
     )
@@ -99,12 +123,12 @@ def build_e2e(trigger, ver_mode):
             [
                 store_storybook_step(trigger = trigger_oss, ver_mode = ver_mode),
                 frontend_metrics_step(trigger = trigger_oss),
-                build_docker_images_step(
-                    publish = False,
-                ),
-                build_docker_images_step(
-                    publish = False,
-                    ubuntu = True,
+                rgm_build_docker_step(
+                    images["ubuntu"],
+                    images["alpine"],
+                    depends_on = ["update-package-json-version"],
+                    tag_format = "{{ .version_base }}-{{ .buildID }}-{{ .arch }}",
+                    ubuntu_tag_format = "{{ .version_base }}-{{ .buildID }}-ubuntu-{{ .arch }}",
                 ),
                 publish_images_step(
                     docker_repo = "grafana",
@@ -130,16 +154,11 @@ def build_e2e(trigger, ver_mode):
     elif ver_mode == "pr":
         build_steps.extend(
             [
-                build_docker_images_step(
-                    archs = [
-                        "amd64",
-                    ],
-                ),
-                build_docker_images_step(
-                    archs = [
-                        "amd64",
-                    ],
-                    ubuntu = True,
+                rgm_build_docker_step(
+                    images["ubuntu"],
+                    images["alpine"],
+                    tag_format = "{{ .version_base }}-{{ .buildID }}-{{ .arch }}",
+                    ubuntu_tag_format = "{{ .version_base }}-{{ .buildID }}-ubuntu-{{ .arch }}",
                 ),
                 publish_images_step(
                     docker_repo = "grafana",

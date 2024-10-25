@@ -9,51 +9,58 @@ import (
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 
+	"github.com/grafana/grafana/pkg/apimachinery/identity"
 	"github.com/grafana/grafana/pkg/infra/localcache"
+	"github.com/grafana/grafana/pkg/infra/log"
 	"github.com/grafana/grafana/pkg/plugins"
 	"github.com/grafana/grafana/pkg/services/datasources"
 	"github.com/grafana/grafana/pkg/services/pluginsintegration/adapters"
+	"github.com/grafana/grafana/pkg/services/pluginsintegration/pluginconfig"
 	"github.com/grafana/grafana/pkg/services/pluginsintegration/pluginsettings"
-	"github.com/grafana/grafana/pkg/services/user"
+	"github.com/grafana/grafana/pkg/services/pluginsintegration/pluginstore"
+	"github.com/grafana/grafana/pkg/setting"
 )
 
-var ErrPluginNotFound = errors.New("plugin not found")
+const (
+	pluginSettingsCacheTTL    = 5 * time.Second
+	pluginSettingsCachePrefix = "plugin-setting-"
+)
 
-func ProvideService(cacheService *localcache.CacheService, pluginStore plugins.Store,
-	dataSourceService datasources.DataSourceService, pluginSettingsService pluginsettings.Service) *Provider {
+func ProvideService(cfg *setting.Cfg, cacheService *localcache.CacheService, pluginStore pluginstore.Store,
+	dataSourceCache datasources.CacheService, dataSourceService datasources.DataSourceService,
+	pluginSettingsService pluginsettings.Service, pluginRequestConfigProvider pluginconfig.PluginRequestConfigProvider) *Provider {
 	return &Provider{
+		BaseProvider:          newBaseProvider(cfg, pluginRequestConfigProvider),
 		cacheService:          cacheService,
 		pluginStore:           pluginStore,
+		dataSourceCache:       dataSourceCache,
 		dataSourceService:     dataSourceService,
 		pluginSettingsService: pluginSettingsService,
+		logger:                log.New("plugin.context"),
 	}
 }
 
 type Provider struct {
+	*BaseProvider
 	cacheService          *localcache.CacheService
-	pluginStore           plugins.Store
+	pluginStore           pluginstore.Store
+	dataSourceCache       datasources.CacheService
 	dataSourceService     datasources.DataSourceService
 	pluginSettingsService pluginsettings.Service
+	logger                log.Logger
 }
 
-// Get allows getting plugin context by its ID. If datasourceUID is not empty string
-// then PluginContext.DataSourceInstanceSettings will be resolved and appended to
-// returned context.
-// Note: *user.SignedInUser can be nil.
-func (p *Provider) Get(ctx context.Context, pluginID string, user *user.SignedInUser, orgID int64) (backend.PluginContext, error) {
+// Get will retrieve plugin context by the provided pluginID and orgID.
+// This is intended to be used for app plugin requests.
+// PluginContext.AppInstanceSettings will be resolved and appended to the returned context.
+// Note: identity.Requester can be nil.
+func (p *Provider) Get(ctx context.Context, pluginID string, user identity.Requester, orgID int64) (backend.PluginContext, error) {
 	plugin, exists := p.pluginStore.Plugin(ctx, pluginID)
 	if !exists {
-		return backend.PluginContext{}, ErrPluginNotFound
+		return backend.PluginContext{}, plugins.ErrPluginNotRegistered
 	}
 
-	pCtx := backend.PluginContext{
-		PluginID: pluginID,
-	}
-	if user != nil {
-		pCtx.OrgID = user.OrgID
-		pCtx.User = adapters.BackendUserFromSignedInUser(user)
-	}
-
+	pCtx := p.GetBasePluginContext(ctx, plugin, user)
 	if plugin.IsApp() {
 		appSettings, err := p.appInstanceSettings(ctx, pluginID, orgID)
 		if err != nil {
@@ -65,22 +72,17 @@ func (p *Provider) Get(ctx context.Context, pluginID string, user *user.SignedIn
 	return pCtx, nil
 }
 
-// GetWithDataSource allows getting plugin context by its ID and PluginContext.DataSourceInstanceSettings will be
-// resolved and appended to the returned context.
-// Note: *user.SignedInUser can be nil.
-func (p *Provider) GetWithDataSource(ctx context.Context, pluginID string, user *user.SignedInUser, ds *datasources.DataSource) (backend.PluginContext, error) {
-	_, exists := p.pluginStore.Plugin(ctx, pluginID)
+// GetWithDataSource will retrieve plugin context by the provided pluginID and datasource.
+// This is intended to be used for datasource plugin requests.
+// PluginContext.DataSourceInstanceSettings will be resolved and appended to the returned context.
+// Note: identity.Requester can be nil.
+func (p *Provider) GetWithDataSource(ctx context.Context, pluginID string, user identity.Requester, ds *datasources.DataSource) (backend.PluginContext, error) {
+	plugin, exists := p.pluginStore.Plugin(ctx, pluginID)
 	if !exists {
-		return backend.PluginContext{}, ErrPluginNotFound
+		return backend.PluginContext{}, plugins.ErrPluginNotRegistered
 	}
 
-	pCtx := backend.PluginContext{
-		PluginID: pluginID,
-	}
-	if user != nil {
-		pCtx.OrgID = user.OrgID
-		pCtx.User = adapters.BackendUserFromSignedInUser(user)
-	}
+	pCtx := p.GetBasePluginContext(ctx, plugin, user)
 
 	datasourceSettings, err := adapters.ModelToInstanceSettings(ds, p.decryptSecureJsonDataFn(ctx))
 	if err != nil {
@@ -91,8 +93,36 @@ func (p *Provider) GetWithDataSource(ctx context.Context, pluginID string, user 
 	return pCtx, nil
 }
 
-const pluginSettingsCacheTTL = 5 * time.Second
-const pluginSettingsCachePrefix = "plugin-setting-"
+func (p *Provider) GetDataSourceInstanceSettings(ctx context.Context, uid string) (*backend.DataSourceInstanceSettings, error) {
+	user, err := identity.GetRequester(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ds, err := p.dataSourceCache.GetDatasourceByUID(ctx, uid, user, false)
+	if err != nil {
+		return nil, err
+	}
+	return adapters.ModelToInstanceSettings(ds, p.decryptSecureJsonDataFn(ctx))
+}
+
+// PluginContextForDataSource will retrieve plugin context by the provided pluginID and datasource UID / K8s name.
+// This is intended to be used for datasource API server plugin requests.
+func (p *Provider) PluginContextForDataSource(ctx context.Context, datasourceSettings *backend.DataSourceInstanceSettings) (backend.PluginContext, error) {
+	pluginID := datasourceSettings.Type
+	plugin, exists := p.pluginStore.Plugin(ctx, pluginID)
+	if !exists {
+		return backend.PluginContext{}, plugins.ErrPluginNotRegistered
+	}
+
+	user, err := identity.GetRequester(ctx)
+	if err != nil {
+		return backend.PluginContext{}, err
+	}
+	pCtx := p.GetBasePluginContext(ctx, plugin, user)
+	pCtx.DataSourceInstanceSettings = datasourceSettings
+
+	return pCtx, nil
+}
 
 func (p *Provider) appInstanceSettings(ctx context.Context, pluginID string, orgID int64) (*backend.AppInstanceSettings, error) {
 	jsonData := json.RawMessage{}

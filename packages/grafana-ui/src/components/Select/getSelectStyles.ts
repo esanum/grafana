@@ -17,6 +17,7 @@ export const getSelectStyles = stylesFactory((theme: GrafanaTheme2) => {
     option: css({
       label: 'grafana-select-option',
       padding: '8px',
+      position: 'relative',
       display: 'flex',
       alignItems: 'center',
       flexDirection: 'row',
@@ -27,6 +28,9 @@ export const getSelectStyles = stylesFactory((theme: GrafanaTheme2) => {
 
       '&:hover': {
         background: theme.colors.action.hover,
+        '@media (forced-colors: active), (prefers-contrast: more)': {
+          border: `1px solid ${theme.colors.primary.border}`,
+        },
       },
     }),
     optionIcon: css({
@@ -55,9 +59,23 @@ export const getSelectStyles = stylesFactory((theme: GrafanaTheme2) => {
     optionFocused: css({
       label: 'grafana-select-option-focused',
       background: theme.colors.action.focus,
+      '@media (forced-colors: active), (prefers-contrast: more)': {
+        border: `1px solid ${theme.colors.primary.border}`,
+      },
     }),
     optionSelected: css({
       background: theme.colors.action.selected,
+      '&::before': {
+        backgroundImage: theme.colors.gradients.brandVertical,
+        borderRadius: theme.shape.radius.default,
+        content: '" "',
+        display: 'block',
+        height: '100%',
+        position: 'absolute',
+        transform: 'translateX(-50%)',
+        width: theme.spacing(0.5),
+        left: 0,
+      },
     }),
     optionDisabled: css({
       label: 'grafana-select-option-disabled',
@@ -90,6 +108,10 @@ export const getSelectStyles = stylesFactory((theme: GrafanaTheme2) => {
       flexWrap: 'wrap',
       display: 'flex',
     }),
+    valueContainerMultiNoWrap: css({
+      display: 'grid',
+      gridAutoFlow: 'column',
+    }),
     loadingMessage: css({
       label: 'grafana-select-loading-message',
       padding: theme.spacing(1),
@@ -102,11 +124,13 @@ export const getSelectStyles = stylesFactory((theme: GrafanaTheme2) => {
       alignItems: 'center',
       lineHeight: 1,
       background: theme.colors.background.secondary,
-      borderRadius: theme.shape.borderRadius(),
+      borderRadius: theme.shape.radius.default,
       margin: theme.spacing(0.25, 1, 0.25, 0),
       padding: theme.spacing(0.25, 0, 0.25, 1),
       color: theme.colors.text.primary,
       fontSize: theme.typography.size.sm,
+      overflow: 'hidden',
+      whiteSpace: 'nowrap',
 
       '&:hover': {
         background: theme.colors.emphasize(theme.colors.background.secondary),
@@ -125,6 +149,25 @@ export const getSelectStyles = stylesFactory((theme: GrafanaTheme2) => {
       '&:hover': {
         color: theme.colors.text.primary,
       },
+    }),
+    groupHeader: css({
+      padding: theme.spacing(1, 1, 1, 0.75),
+      borderLeft: '2px solid transparent',
+    }),
+    group: css({
+      '&:not(:first-child)': {
+        borderTop: `1px solid ${theme.colors.border.weak}`,
+      },
+      // ensure there's a bottom border if there are options following the group
+      ':has(+ [role="option"])': {
+        borderBottom: `1px solid ${theme.colors.border.weak}`,
+      },
+    }),
+    toggleAllButton: css({
+      width: '100%',
+      border: 0,
+      padding: 0,
+      textAlign: 'left',
     }),
   };
 });

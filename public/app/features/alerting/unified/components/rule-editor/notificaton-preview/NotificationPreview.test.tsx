@@ -1,45 +1,37 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import React from 'react';
+import { render, screen, waitFor, within, userEvent } from 'test/test-utils';
 import { byRole, byTestId, byText } from 'testing-library-selector';
 
-import { contextSrv } from 'app/core/services/context_srv';
 import { AccessControlAction } from 'app/types/accessControl';
 
 import 'core-js/stable/structured-clone';
-import { TestProvider } from '../../../../../../../test/helpers/TestProvider';
 import { MatcherOperator } from '../../../../../../plugins/datasource/alertmanager/types';
 import { Labels } from '../../../../../../types/unified-alerting-dto';
 import { mockApi, setupMswServer } from '../../../mockApi';
-import { mockAlertQuery } from '../../../mocks';
-import { mockPreviewApiResponse } from '../../../mocks/alertRuleApi';
+import { grantUserPermissions, mockAlertQuery } from '../../../mocks';
+import { mockPreviewApiResponse } from '../../../mocks/grafanaRulerApi';
 import * as dataSource from '../../../utils/datasource';
-import { GRAFANA_RULES_SOURCE_NAME } from '../../../utils/datasource';
+import {
+  AlertManagerDataSource,
+  GRAFANA_RULES_SOURCE_NAME,
+  useGetAlertManagerDataSourcesByPermissionAndConfig,
+} from '../../../utils/datasource';
 import { Folder } from '../RuleFolderPicker';
 
 import { NotificationPreview } from './NotificationPreview';
 import NotificationPreviewByAlertManager from './NotificationPreviewByAlertManager';
-import * as notificationPreview from './useGetAlertManagersSourceNamesAndImage';
-import { useGetAlertManagersSourceNamesAndImage } from './useGetAlertManagersSourceNamesAndImage';
 
 jest.mock('../../../useRouteGroupsMatcher');
 
 jest
-  .spyOn(notificationPreview, 'useGetAlertManagersSourceNamesAndImage')
-  .mockReturnValue([{ name: GRAFANA_RULES_SOURCE_NAME, img: '' }]);
-
-jest.spyOn(notificationPreview, 'useGetAlertManagersSourceNamesAndImage').mockReturnValue([
-  { name: GRAFANA_RULES_SOURCE_NAME, img: '' },
-  { name: GRAFANA_RULES_SOURCE_NAME, img: '' },
-]);
+  .spyOn(dataSource, 'useGetAlertManagerDataSourcesByPermissionAndConfig')
+  .mockReturnValue([{ name: GRAFANA_RULES_SOURCE_NAME, imgUrl: '', hasConfigurationAPI: true }]);
 
 jest.spyOn(dataSource, 'getDatasourceAPIUid').mockImplementation((ds: string) => ds);
-jest.mock('app/core/services/context_srv');
-const contextSrvMock = jest.mocked(contextSrv);
 
-const useGetAlertManagersSourceNamesAndImageMock = useGetAlertManagersSourceNamesAndImage as jest.MockedFunction<
-  typeof useGetAlertManagersSourceNamesAndImage
->;
+const getAlertManagerDataSourcesByPermissionAndConfigMock =
+  useGetAlertManagerDataSourcesByPermissionAndConfig as jest.MockedFunction<
+    typeof useGetAlertManagerDataSourcesByPermissionAndConfig
+  >;
 
 const ui = {
   route: byTestId('matching-policy-route'),
@@ -47,8 +39,8 @@ const ui = {
   routeMatchingInstances: byTestId('route-matching-instance'),
   loadingIndicator: byText(/Loading/),
   previewButton: byRole('button', { name: /preview routing/i }),
-  grafanaAlertManagerLabel: byText(/alert manager:grafana/i),
-  otherAlertManagerLabel: byText(/alert manager:other_am/i),
+  grafanaAlertManagerLabel: byText(/alertmanager:grafana/i),
+  otherAlertManagerLabel: byText(/alertmanager:other_am/i),
   seeDetails: byText(/see details/i),
   details: {
     title: byRole('heading', { name: /routing details/i }),
@@ -65,8 +57,14 @@ beforeEach(() => {
 
 const alertQuery = mockAlertQuery({ datasourceUid: 'whatever', refId: 'A' });
 
+const grafanaAlertManagerDataSource: AlertManagerDataSource = {
+  name: GRAFANA_RULES_SOURCE_NAME,
+  imgUrl: '',
+  hasConfigurationAPI: true,
+};
+
 function mockOneAlertManager() {
-  useGetAlertManagersSourceNamesAndImageMock.mockReturnValue([{ name: GRAFANA_RULES_SOURCE_NAME, img: '' }]);
+  getAlertManagerDataSourcesByPermissionAndConfigMock.mockReturnValue([grafanaAlertManagerDataSource]);
   mockApi(server).getAlertmanagerConfig(GRAFANA_RULES_SOURCE_NAME, (amConfigBuilder) =>
     amConfigBuilder
       .withRoute((routeBuilder) =>
@@ -82,10 +80,11 @@ function mockOneAlertManager() {
 }
 
 function mockTwoAlertManagers() {
-  useGetAlertManagersSourceNamesAndImageMock.mockReturnValue([
-    { name: GRAFANA_RULES_SOURCE_NAME, img: '' },
-    { name: 'OTHER_AM', img: '' },
+  getAlertManagerDataSourcesByPermissionAndConfigMock.mockReturnValue([
+    { name: 'OTHER_AM', imgUrl: '', hasConfigurationAPI: true },
+    grafanaAlertManagerDataSource,
   ]);
+
   mockApi(server).getAlertmanagerConfig(GRAFANA_RULES_SOURCE_NAME, (amConfigBuilder) =>
     amConfigBuilder
       .withRoute((routeBuilder) =>
@@ -113,20 +112,19 @@ function mockTwoAlertManagers() {
 }
 
 function mockHasEditPermission(enabled: boolean) {
-  contextSrvMock.accessControlEnabled.mockReturnValue(true);
-  contextSrvMock.hasAccess.mockImplementation((action) => {
-    const onlyReadPermissions: string[] = [
-      AccessControlAction.AlertingNotificationsRead,
-      AccessControlAction.AlertingNotificationsExternalRead,
-    ];
-    const readAndWritePermissions: string[] = [
-      AccessControlAction.AlertingNotificationsRead,
-      AccessControlAction.AlertingNotificationsWrite,
-      AccessControlAction.AlertingNotificationsExternalRead,
-      AccessControlAction.AlertingNotificationsExternalWrite,
-    ];
-    return enabled ? readAndWritePermissions.includes(action) : onlyReadPermissions.includes(action);
-  });
+  const onlyReadPermissions = [
+    AccessControlAction.AlertingNotificationsRead,
+    AccessControlAction.AlertingNotificationsExternalRead,
+  ];
+
+  const readAndWritePermissions = [
+    AccessControlAction.AlertingNotificationsRead,
+    AccessControlAction.AlertingNotificationsWrite,
+    AccessControlAction.AlertingNotificationsExternalRead,
+    AccessControlAction.AlertingNotificationsExternalWrite,
+  ];
+
+  return enabled ? grantUserPermissions(readAndWritePermissions) : grantUserPermissions(onlyReadPermissions);
 }
 
 const folder: Folder = {
@@ -139,30 +137,31 @@ describe('NotificationPreview', () => {
     mockOneAlertManager();
     mockPreviewApiResponse(server, [{ labels: [{ tomato: 'red', avocate: 'green' }] }]);
 
-    render(<NotificationPreview alertQueries={[alertQuery]} customLabels={[]} condition="" folder={folder} />, {
-      wrapper: TestProvider,
-    });
+    render(<NotificationPreview alertQueries={[alertQuery]} customLabels={[]} condition="A" folder={folder} />);
 
     await userEvent.click(ui.previewButton.get());
     await waitFor(() => {
       expect(ui.loadingIndicator.query()).not.toBeInTheDocument();
     });
+
     // we expect the alert manager label to be missing as there is only one alert manager configured to receive alerts
-    expect(ui.grafanaAlertManagerLabel.query()).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(ui.grafanaAlertManagerLabel.query()).not.toBeInTheDocument();
+    });
     expect(ui.otherAlertManagerLabel.query()).not.toBeInTheDocument();
 
-    const matchingPoliciesElements = ui.route.queryAll();
-    expect(matchingPoliciesElements).toHaveLength(1);
-    expect(matchingPoliciesElements[0]).toHaveTextContent(/tomato = red/);
+    const matchingPoliciesElements = ui.route.queryAll;
+    await waitFor(() => {
+      expect(matchingPoliciesElements()).toHaveLength(1);
+    });
+    expect(matchingPoliciesElements()[0]).toHaveTextContent(/tomato = red/);
   });
   it('should render notification preview with alert manager sections, when having more than one alert manager configured to receive alerts', async () => {
     // two alert managers configured  to receive alerts
     mockTwoAlertManagers();
     mockPreviewApiResponse(server, [{ labels: [{ tomato: 'red', avocate: 'green' }] }]);
 
-    render(<NotificationPreview alertQueries={[alertQuery]} customLabels={[]} condition="" folder={folder} />, {
-      wrapper: TestProvider,
-    });
+    render(<NotificationPreview alertQueries={[alertQuery]} customLabels={[]} condition="A" folder={folder} />);
     await waitFor(() => {
       expect(ui.loadingIndicator.query()).not.toBeInTheDocument();
     });
@@ -171,13 +170,11 @@ describe('NotificationPreview', () => {
     await waitFor(() => {
       expect(ui.loadingIndicator.query()).not.toBeInTheDocument();
     });
-    await waitFor(() => {
-      expect(ui.loadingIndicator.query()).not.toBeInTheDocument();
-    });
 
     // we expect the alert manager label to be present as there is more than one alert manager configured to receive alerts
-    expect(ui.grafanaAlertManagerLabel.query()).toBeInTheDocument();
-
+    await waitFor(() => {
+      expect(ui.grafanaAlertManagerLabel.query()).toBeInTheDocument();
+    });
     expect(ui.otherAlertManagerLabel.query()).toBeInTheDocument();
 
     const matchingPoliciesElements = ui.route.queryAll();
@@ -191,22 +188,13 @@ describe('NotificationPreview', () => {
     mockPreviewApiResponse(server, [{ labels: [{ tomato: 'red', avocate: 'green' }] }]);
     mockHasEditPermission(true);
 
-    render(<NotificationPreview alertQueries={[alertQuery]} customLabels={[]} condition="" folder={folder} />, {
-      wrapper: TestProvider,
-    });
+    render(<NotificationPreview alertQueries={[alertQuery]} customLabels={[]} condition="A" folder={folder} />);
     await waitFor(() => {
       expect(ui.loadingIndicator.query()).not.toBeInTheDocument();
     });
 
     await userEvent.click(ui.previewButton.get());
-    await waitFor(() => {
-      expect(ui.loadingIndicator.query()).not.toBeInTheDocument();
-    });
-    //open details modal
-    await waitFor(() => {
-      expect(ui.loadingIndicator.query()).not.toBeInTheDocument();
-    });
-    await userEvent.click(ui.seeDetails.get());
+    await userEvent.click(await ui.seeDetails.find());
     expect(ui.details.title.query()).toBeInTheDocument();
     //we expect seeing the default policy
     expect(screen.getByText(/default policy/i)).toBeInTheDocument();
@@ -222,22 +210,13 @@ describe('NotificationPreview', () => {
     mockPreviewApiResponse(server, [{ labels: [{ tomato: 'red', avocate: 'green' }] }]);
     mockHasEditPermission(false);
 
-    render(<NotificationPreview alertQueries={[alertQuery]} customLabels={[]} condition="" folder={folder} />, {
-      wrapper: TestProvider,
-    });
+    render(<NotificationPreview alertQueries={[alertQuery]} customLabels={[]} condition="A" folder={folder} />);
     await waitFor(() => {
       expect(ui.loadingIndicator.query()).not.toBeInTheDocument();
     });
 
     await userEvent.click(ui.previewButton.get());
-    await waitFor(() => {
-      expect(ui.loadingIndicator.query()).not.toBeInTheDocument();
-    });
-    //open details modal
-    await waitFor(() => {
-      expect(ui.loadingIndicator.query()).not.toBeInTheDocument();
-    });
-    await userEvent.click(ui.seeDetails.get());
+    await userEvent.click(await ui.seeDetails.find());
     expect(ui.details.title.query()).toBeInTheDocument();
     //we expect seeing the default policy
     expect(screen.getByText(/default policy/i)).toBeInTheDocument();
@@ -273,11 +252,10 @@ describe('NotificationPreviewByAlertmanager', () => {
 
     render(
       <NotificationPreviewByAlertManager
-        alertManagerSource={{ name: GRAFANA_RULES_SOURCE_NAME, img: '' }}
+        alertManagerSource={grafanaAlertManagerDataSource}
         potentialInstances={potentialInstances}
         onlyOneAM={true}
-      />,
-      { wrapper: TestProvider }
+      />
     );
 
     await waitFor(() => {
@@ -328,11 +306,10 @@ describe('NotificationPreviewByAlertmanager', () => {
 
     render(
       <NotificationPreviewByAlertManager
-        alertManagerSource={{ name: GRAFANA_RULES_SOURCE_NAME, img: '' }}
+        alertManagerSource={grafanaAlertManagerDataSource}
         potentialInstances={potentialInstances}
         onlyOneAM={true}
-      />,
-      { wrapper: TestProvider }
+      />
     );
 
     await waitFor(() => {
@@ -383,11 +360,10 @@ describe('NotificationPreviewByAlertmanager', () => {
 
     render(
       <NotificationPreviewByAlertManager
-        alertManagerSource={{ name: GRAFANA_RULES_SOURCE_NAME, img: '' }}
+        alertManagerSource={grafanaAlertManagerDataSource}
         potentialInstances={potentialInstances}
         onlyOneAM={true}
-      />,
-      { wrapper: TestProvider }
+      />
     );
 
     await waitFor(() => {
@@ -411,5 +387,81 @@ describe('NotificationPreviewByAlertmanager', () => {
 
     expect(matchingInstances1).toHaveTextContent(/job=prometheus/);
     expect(matchingInstances1).toHaveTextContent(/severity=warning/);
+  });
+
+  describe('regex matching', () => {
+    it('does not match regex in middle of the word as alertmanager will anchor when queried via API', async () => {
+      const potentialInstances: Labels[] = [{ regexfield: 'foobarfoo' }];
+
+      mockApi(server).getAlertmanagerConfig(GRAFANA_RULES_SOURCE_NAME, (amConfigBuilder) =>
+        amConfigBuilder
+          .addReceivers((b) => b.withName('email'))
+          .withRoute((routeBuilder) =>
+            routeBuilder
+              .withReceiver('email')
+              .addRoute((rb) => rb.withReceiver('email').addMatcher('regexfield', MatcherOperator.regex, 'bar'))
+          )
+      );
+
+      render(
+        <NotificationPreviewByAlertManager
+          alertManagerSource={grafanaAlertManagerDataSource}
+          potentialInstances={potentialInstances}
+          onlyOneAM={true}
+        />
+      );
+
+      expect(await screen.findByText(/default policy/i)).toBeInTheDocument();
+      expect(screen.queryByText(/regexfield/)).not.toBeInTheDocument();
+    });
+
+    it('matches regex at the start of the word', async () => {
+      const potentialInstances: Labels[] = [{ regexfield: 'baaaaaaah' }];
+
+      mockApi(server).getAlertmanagerConfig(GRAFANA_RULES_SOURCE_NAME, (amConfigBuilder) =>
+        amConfigBuilder
+          .addReceivers((b) => b.withName('email'))
+          .withRoute((routeBuilder) =>
+            routeBuilder
+              .withReceiver('email')
+              .addRoute((rb) => rb.withReceiver('email').addMatcher('regexfield', MatcherOperator.regex, 'ba.*h'))
+          )
+      );
+
+      render(
+        <NotificationPreviewByAlertManager
+          alertManagerSource={grafanaAlertManagerDataSource}
+          potentialInstances={potentialInstances}
+          onlyOneAM={true}
+        />
+      );
+
+      expect(await screen.findByText(/regexfield/i)).toBeInTheDocument();
+    });
+
+    it('handles negated regex correctly', async () => {
+      const potentialInstances: Labels[] = [{ regexfield: 'thing' }];
+
+      mockApi(server).getAlertmanagerConfig(GRAFANA_RULES_SOURCE_NAME, (amConfigBuilder) =>
+        amConfigBuilder
+          .addReceivers((b) => b.withName('email'))
+          .withRoute((routeBuilder) =>
+            routeBuilder
+              .withReceiver('email')
+              .addRoute((rb) => rb.withReceiver('email').addMatcher('regexfield', MatcherOperator.notRegex, 'thing'))
+          )
+      );
+
+      render(
+        <NotificationPreviewByAlertManager
+          alertManagerSource={grafanaAlertManagerDataSource}
+          potentialInstances={potentialInstances}
+          onlyOneAM={true}
+        />
+      );
+
+      expect(await screen.findByText(/default policy/i)).toBeInTheDocument();
+      expect(screen.queryByText(/regexfield/i)).not.toBeInTheDocument();
+    });
   });
 });

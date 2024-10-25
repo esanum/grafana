@@ -2,7 +2,7 @@ import { Interception } from 'cypress/types/net-stubbing';
 import { load } from 'js-yaml';
 import { v4 as uuidv4 } from 'uuid';
 
-import { e2e } from '@grafana/e2e';
+import { selectors as rawSelectors } from '@grafana/e2e-selectors';
 
 import { selectors } from '../../public/app/plugins/datasource/azuremonitor/e2e/selectors';
 import {
@@ -10,8 +10,9 @@ import {
   AzureDataSourceSecureJsonData,
   AzureQueryType,
 } from '../../public/app/plugins/datasource/azuremonitor/types';
+import { e2e } from '../utils';
 
-const provisioningPath = `../../provisioning/datasources/azmonitor-ds.yaml`;
+const provisioningPath = `provisioning/datasources/azmonitor-ds.yaml`;
 const e2eSelectors = e2e.getSelectors(selectors.components);
 
 type AzureMonitorConfig = {
@@ -40,9 +41,7 @@ Cypress.Commands.add('checkHealthRetryable', function (fn: Function, retryCount:
 function provisionAzureMonitorDatasources(datasources: AzureMonitorProvision[]) {
   const datasource = datasources[0].datasources[0];
 
-  e2e()
-    .intercept(/subscriptions/)
-    .as('subscriptions');
+  cy.intercept(/subscriptions/).as('subscriptions');
 
   e2e.flows.addDataSource({
     type: 'Azure Monitor',
@@ -71,18 +70,20 @@ function provisionAzureMonitorDatasources(datasources: AzureMonitorProvision[]) 
   });
 }
 
+// Helper function to add template variables
 const addAzureMonitorVariable = (
   name: string,
   type: AzureQueryType,
   isFirst: boolean,
   options?: { subscription?: string; resourceGroup?: string; namespace?: string; resource?: string; region?: string }
 ) => {
-  e2e.components.PageToolbar.item('Dashboard settings').click();
+  e2e.components.NavToolbar.editDashboard.editButton().should('be.visible').click();
+  e2e.components.NavToolbar.editDashboard.settingsButton().should('be.visible').click();
   e2e.components.Tab.title('Variables').click();
   if (isFirst) {
     e2e.pages.Dashboard.Settings.Variables.List.addVariableCTAV2().click();
   } else {
-    e2e.pages.Dashboard.Settings.Variables.List.newButton().click();
+    cy.get(`[data-testid="${rawSelectors.pages.Dashboard.Settings.Variables.List.newButton}"]`).click();
   }
   e2e.pages.Dashboard.Settings.Variables.Edit.General.generalNameInputV2().clear().type(name);
   e2e.components.DataSourcePicker.inputV2().type(`${dataSourceName}{enter}`);
@@ -92,114 +93,81 @@ const addAzureMonitorVariable = (
     .type(`${type.replace('Azure', '').trim()}{enter}`);
   switch (type) {
     case AzureQueryType.ResourceGroupsQuery:
-      e2eSelectors.variableEditor.subscription
-        .input()
-        .find('input')
-        .type(`${options?.subscription}{enter}`);
+      e2eSelectors.variableEditor.subscription.input().find('input').type(`${options?.subscription}{enter}`);
       break;
     case AzureQueryType.LocationsQuery:
-      e2eSelectors.variableEditor.subscription
-        .input()
-        .find('input')
-        .type(`${options?.subscription}{enter}`);
+      e2eSelectors.variableEditor.subscription.input().find('input').type(`${options?.subscription}{enter}`);
       break;
     case AzureQueryType.NamespacesQuery:
-      e2eSelectors.variableEditor.subscription
-        .input()
-        .find('input')
-        .type(`${options?.subscription}{enter}`);
-      e2eSelectors.variableEditor.resourceGroup
-        .input()
-        .find('input')
-        .type(`${options?.resourceGroup}{enter}`);
+      e2eSelectors.variableEditor.subscription.input().find('input').type(`${options?.subscription}{enter}`);
+      e2eSelectors.variableEditor.resourceGroup.input().find('input').type(`${options?.resourceGroup}{enter}`);
       break;
     case AzureQueryType.ResourceNamesQuery:
-      e2eSelectors.variableEditor.subscription
-        .input()
-        .find('input')
-        .type(`${options?.subscription}{enter}`);
-      e2eSelectors.variableEditor.resourceGroup
-        .input()
-        .find('input')
-        .type(`${options?.resourceGroup}{enter}`);
-      e2eSelectors.variableEditor.namespace
-        .input()
-        .find('input')
-        .type(`${options?.namespace}{enter}`);
-      e2eSelectors.variableEditor.region
-        .input()
-        .find('input')
-        .type(`${options?.region}{enter}`);
+      e2eSelectors.variableEditor.subscription.input().find('input').type(`${options?.subscription}{enter}`);
+      e2eSelectors.variableEditor.resourceGroup.input().find('input').type(`${options?.resourceGroup}{enter}`);
+      e2eSelectors.variableEditor.namespace.input().find('input').type(`${options?.namespace}{enter}`);
+      e2eSelectors.variableEditor.region.input().find('input').type(`${options?.region}{enter}`);
       break;
     case AzureQueryType.MetricNamesQuery:
-      e2eSelectors.variableEditor.subscription
-        .input()
-        .find('input')
-        .type(`${options?.subscription}{enter}`);
-      e2eSelectors.variableEditor.resourceGroup
-        .input()
-        .find('input')
-        .type(`${options?.resourceGroup}{enter}`);
-      e2eSelectors.variableEditor.namespace
-        .input()
-        .find('input')
-        .type(`${options?.namespace}{enter}`);
-      e2eSelectors.variableEditor.resource
-        .input()
-        .find('input')
-        .type(`${options?.resource}{enter}`);
+      e2eSelectors.variableEditor.subscription.input().find('input').type(`${options?.subscription}{enter}`);
+      e2eSelectors.variableEditor.resourceGroup.input().find('input').type(`${options?.resourceGroup}{enter}`);
+      e2eSelectors.variableEditor.namespace.input().find('input').type(`${options?.namespace}{enter}`);
+      e2eSelectors.variableEditor.resource.input().find('input').type(`${options?.resource}{enter}`);
       break;
   }
   e2e.pages.Dashboard.Settings.Variables.Edit.General.submitButton().click();
-  e2e.pages.Dashboard.Settings.Actions.close().click();
+  e2e.components.NavToolbar.editDashboard.backToDashboardButton().click();
+  e2e.components.NavToolbar.editDashboard.exitButton().click();
 };
 
 const storageAcctName = 'azmonteststorage';
 const logAnalyticsName = 'az-mon-test-logs';
 const applicationInsightsName = 'az-mon-test-ai-a';
 
-e2e.scenario({
-  describeName: 'Add Azure Monitor datasource',
-  itName: 'fills out datasource connection configuration',
-  scenario: () => {
+describe('Azure monitor datasource', () => {
+  before(() => {
+    e2e.flows.login(Cypress.env('USERNAME'), Cypress.env('PASSWORD'));
+
+    // Add datasource
     // This variable will be set in CI
-    const CI = e2e.env('CI');
+    const CI = Cypress.env('CI');
     if (CI) {
-      e2e()
-        .readFile('../../outputs.json')
-        .then((outputs) => {
-          provisionAzureMonitorDatasources([
-            {
-              datasources: [
-                {
-                  jsonData: {
-                    cloudName: 'Azure',
-                    tenantId: outputs.tenantId,
-                    clientId: outputs.clientId,
-                  },
-                  secureJsonData: { clientSecret: outputs.clientSecret },
+      cy.readFile('outputs.json').then((outputs) => {
+        provisionAzureMonitorDatasources([
+          {
+            datasources: [
+              {
+                jsonData: {
+                  cloudName: 'Azure',
+                  tenantId: outputs.tenantId,
+                  clientId: outputs.clientId,
                 },
-              ],
-            },
-          ]);
-        });
+                secureJsonData: { clientSecret: outputs.clientSecret },
+              },
+            ],
+          },
+        ]);
+      });
     } else {
-      e2e()
-        .readFile(provisioningPath)
-        .then((azMonitorProvision: string) => {
-          // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-          const yaml = load(azMonitorProvision) as AzureMonitorProvision;
-          provisionAzureMonitorDatasources([yaml]);
-        });
+      cy.readFile(provisioningPath).then((azMonitorProvision: string) => {
+        // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+        const yaml = load(azMonitorProvision) as AzureMonitorProvision;
+        provisionAzureMonitorDatasources([yaml]);
+      });
     }
     e2e.setScenarioContext({ addedDataSources: [] });
-  },
-});
+  });
 
-e2e.scenario({
-  describeName: 'Create dashboard and add a panel for each query type',
-  itName: 'create dashboard, add panel for metrics, log analytics, ARG, and traces queries',
-  scenario: () => {
+  beforeEach(() => {
+    e2e.flows.login(Cypress.env('USERNAME'), Cypress.env('PASSWORD'));
+  });
+
+  after(() => {
+    e2e.flows.login(Cypress.env('USERNAME'), Cypress.env('PASSWORD'));
+    e2e.flows.revertAllChanges();
+  });
+
+  it('create dashboard, add panel for metrics, log analytics, ARG, and traces queries', () => {
     e2e.flows.addDashboard({
       timeRange: {
         from: 'now-6h',
@@ -207,28 +175,26 @@ e2e.scenario({
         zone: 'Coordinated Universal Time',
       },
     });
-    e2e()
-      .intercept(/locations/)
-      .as('locations');
     e2e.flows.addPanel({
       dataSourceName,
       visitDashboardAtStart: false,
       queriesForm: () => {
-        e2eSelectors.queryEditor.resourcePicker.select.button().click().wait('@locations');
+        e2eSelectors.queryEditor.resourcePicker.select.button().click();
         e2eSelectors.queryEditor.resourcePicker.search
           .input()
           .wait(100)
           .type(storageAcctName)
           .wait(500)
           .type('{enter}');
-        e2e().contains(storageAcctName).click();
+        cy.contains(storageAcctName).click();
         e2eSelectors.queryEditor.resourcePicker.apply.button().click();
-        e2e().contains('microsoft.storage/storageaccounts');
+        cy.contains('microsoft.storage/storageaccounts');
         e2eSelectors.queryEditor.metricsQueryEditor.metricName.input().find('input').type('Used capacity{enter}');
       },
       timeout: 10000,
     });
-    e2e.components.PanelEditor.applyButton().click();
+    e2e.components.NavToolbar.editDashboard.backToDashboardButton().click();
+    e2e.components.NavToolbar.editDashboard.exitButton().click();
     e2e.flows.addPanel({
       dataSourceName,
       visitDashboardAtStart: false,
@@ -241,33 +207,35 @@ e2e.scenario({
           .type(logAnalyticsName)
           .wait(500)
           .type('{enter}');
-        e2e().contains(logAnalyticsName).click();
+        cy.contains(logAnalyticsName).click();
         e2eSelectors.queryEditor.resourcePicker.apply.button().click();
         e2e.components.CodeEditor.container().type('AzureDiagnostics');
         e2eSelectors.queryEditor.logsQueryEditor.formatSelection.input().type('Time series{enter}');
       },
       timeout: 10000,
     });
-    e2e.components.PanelEditor.applyButton().click();
+    e2e.components.NavToolbar.editDashboard.backToDashboardButton().click();
+    e2e.components.NavToolbar.editDashboard.exitButton().click();
     e2e.flows.addPanel({
       dataSourceName,
       visitDashboardAtStart: false,
       queriesForm: () => {
         e2eSelectors.queryEditor.header.select().find('input').type('Azure Resource Graph{enter}');
-        e2e().wait(1000); // Need to wait for code editor to completely load
+        cy.wait(1000); // Need to wait for code editor to completely load
         e2eSelectors.queryEditor.argsQueryEditor.subscriptions
           .input()
           .find('[aria-label="select-clear-value"]')
           .click();
         e2eSelectors.queryEditor.argsQueryEditor.subscriptions.input().find('input').type('datasources{enter}');
         e2e.components.CodeEditor.container().type(
-          "Resources | where resourceGroup == 'cloud-plugins-e2e-test' | project name, resourceGroup"
+          "Resources | where resourceGroup == 'cloud-plugins-e2e-test-azmon' | project name, resourceGroup"
         );
         e2e.components.PanelEditor.toggleTableView().click({ force: true });
       },
       timeout: 10000,
     });
-    e2e.components.PanelEditor.applyButton().click();
+    e2e.components.NavToolbar.editDashboard.backToDashboardButton().click();
+    e2e.components.NavToolbar.editDashboard.exitButton().click();
     e2e.flows.addPanel({
       dataSourceName,
       visitDashboardAtStart: false,
@@ -280,20 +248,16 @@ e2e.scenario({
           .type(applicationInsightsName)
           .wait(500)
           .type('{enter}');
-        e2e().contains(applicationInsightsName).click();
+        cy.contains(applicationInsightsName).click();
         e2eSelectors.queryEditor.resourcePicker.apply.button().click();
-        e2e().wait(10000);
+        cy.wait(10000);
         e2eSelectors.queryEditor.logsQueryEditor.formatSelection.input().type('Trace{enter}');
       },
       timeout: 10000,
     });
-  },
-});
+  });
 
-e2e.scenario({
-  describeName: 'Create dashboard with template variables',
-  itName: 'creates a dashboard that includes a template variable',
-  scenario: () => {
+  it('creates a dashboard that includes a template variable', () => {
     e2e.flows.addDashboard({
       timeRange: {
         from: 'now-6h',
@@ -318,25 +282,32 @@ e2e.scenario({
       namespace: '$namespace',
       region: '$region',
     });
-    e2e.pages.Dashboard.SubMenu.submenuItemLabels('subscription').click();
-    e2e.pages.Dashboard.SubMenu.submenuItemValueDropDownOptionTexts('grafanalabs-datasources-dev').click();
-    e2e.pages.Dashboard.SubMenu.submenuItemLabels('resourceGroups').parent().find('button').click();
+    e2e.pages.Dashboard.SubMenu.submenuItemLabels('subscription')
+      .parent()
+      .within(() => {
+        cy.get('input').click();
+      });
+    e2e.components.Select.option().contains('grafanalabs-datasources-dev').click();
     e2e.pages.Dashboard.SubMenu.submenuItemLabels('resourceGroups')
       .parent()
-      .find('input')
-      .type('cloud-plugins-e2e-test{downArrow}{enter}');
-    e2e.pages.Dashboard.SubMenu.submenuItemLabels('namespaces').parent().find('button').click();
+      .within(() => {
+        cy.get('input').type('cloud-plugins-e2e-test-azmon{downArrow}{enter}');
+      });
     e2e.pages.Dashboard.SubMenu.submenuItemLabels('namespaces')
       .parent()
-      .find('input')
-      .type('microsoft.storage/storageaccounts{downArrow}{enter}');
-    e2e.pages.Dashboard.SubMenu.submenuItemLabels('region').parent().find('button').click();
-    e2e.pages.Dashboard.SubMenu.submenuItemLabels('region').parent().find('input').type('uk south{downArrow}{enter}');
-    e2e.pages.Dashboard.SubMenu.submenuItemLabels('resource').parent().find('button').click();
+      .within(() => {
+        cy.get('input').type('microsoft.storage/storageaccounts{downArrow}{enter}');
+      });
+    e2e.pages.Dashboard.SubMenu.submenuItemLabels('region')
+      .parent()
+      .within(() => {
+        cy.get('input').type('uk south{downArrow}{enter}');
+      });
     e2e.pages.Dashboard.SubMenu.submenuItemLabels('resource')
       .parent()
-      .find('input')
-      .type(`${storageAcctName}{downArrow}{enter}`);
+      .within(() => {
+        cy.get('input').type(`${storageAcctName}{downArrow}{enter}`);
+      });
     e2e.flows.addPanel({
       dataSourceName,
       visitDashboardAtStart: false,
@@ -353,13 +324,9 @@ e2e.scenario({
       },
       timeout: 10000,
     });
-  },
-});
+  });
 
-e2e.scenario({
-  describeName: 'Create dashboard with annotation',
-  itName: 'creates a dashboard that includes an annotation',
-  scenario: () => {
+  it.skip('creates a dashboard that includes an annotation', () => {
     e2e.flows.addDashboard({
       timeRange: {
         from: '2022-10-03 00:00:00',
@@ -374,11 +341,11 @@ e2e.scenario({
     e2e.components.DataSourcePicker.inputV2().click().type(`${dataSourceName}{enter}`);
     e2eSelectors.queryEditor.resourcePicker.select.button().click();
     e2eSelectors.queryEditor.resourcePicker.search.input().type(storageAcctName);
-    e2e().contains(storageAcctName).click();
+    cy.contains(storageAcctName).click();
     e2eSelectors.queryEditor.resourcePicker.apply.button().click();
-    e2e().contains('microsoft.storage/storageaccounts');
+    cy.contains('microsoft.storage/storageaccounts');
     e2eSelectors.queryEditor.metricsQueryEditor.metricName.input().find('input').type('Transactions{enter}');
-    e2e().get('table').contains('text').parent().find('input').click().type('Transactions (number){enter}');
+    cy.get('table').contains('text').parent().find('input').click().type('Transactions (number){enter}');
     e2e.components.PageToolbar.item('Go Back').click();
     e2e.flows.addPanel({
       dataSourceName,
@@ -386,20 +353,11 @@ e2e.scenario({
       queriesForm: () => {
         e2eSelectors.queryEditor.resourcePicker.select.button().click();
         e2eSelectors.queryEditor.resourcePicker.search.input().type(storageAcctName);
-        e2e().contains(storageAcctName).click();
+        cy.contains(storageAcctName).click();
         e2eSelectors.queryEditor.resourcePicker.apply.button().click();
-        e2e().contains('microsoft.storage/storageaccounts');
+        cy.contains('microsoft.storage/storageaccounts');
         e2eSelectors.queryEditor.metricsQueryEditor.metricName.input().find('input').type('Used capacity{enter}');
       },
     });
-  },
-  skipScenario: true,
-});
-
-e2e.scenario({
-  describeName: 'Remove datasource',
-  itName: 'remove azure monitor datasource',
-  scenario: () => {
-    e2e.flows.deleteDataSource({ name: dataSourceName, id: '', quick: true });
-  },
+  });
 });

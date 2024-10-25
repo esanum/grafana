@@ -1,5 +1,5 @@
 import { css } from '@emotion/css';
-import React from 'react';
+import * as React from 'react';
 
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
@@ -28,7 +28,7 @@ const getStyles = (theme: GrafanaTheme2) => {
     root: css({
       padding: theme.spacing(1),
       backgroundColor: theme.colors.background.secondary,
-      borderRadius: theme.shape.borderRadius(1),
+      borderRadius: theme.shape.radius.default,
     }),
   };
 };

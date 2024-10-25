@@ -1,10 +1,13 @@
 import { css, cx } from '@emotion/css';
-import React, { useRef } from 'react';
+import { useRef } from 'react';
+import * as React from 'react';
 import { Observable } from 'rxjs';
 
 import { DataSourceInstanceSettings, DataSourceRef, GrafanaTheme2 } from '@grafana/data';
+import { selectors } from '@grafana/e2e-selectors';
 import { getTemplateSrv } from '@grafana/runtime';
 import { useStyles2, useTheme2 } from '@grafana/ui';
+import { Trans } from 'app/core/internationalization';
 
 import { useDatasources, useKeyboardNavigatableList, useRecentlyUsedDataSources } from '../../hooks';
 
@@ -71,7 +74,11 @@ export function DataSourceList(props: DataSourceListProps) {
   const filteredDataSources = props.filter ? dataSources.filter(props.filter) : dataSources;
 
   return (
-    <div ref={containerRef} className={cx(className, styles.container)} data-testid="data-sources-list">
+    <div
+      ref={containerRef}
+      className={cx(className, styles.container)}
+      data-testid={selectors.components.DataSourcePicker.dataSourceList}
+    >
       {filteredDataSources.length === 0 && (
         <EmptyState className={styles.emptyState} onClickCTA={onClickEmptyStateCTA} />
       )}
@@ -98,7 +105,9 @@ function EmptyState({ className, onClickCTA }: { className?: string; onClickCTA?
   const styles = useStyles2(getEmptyStateStyles);
   return (
     <div className={cx(className, styles.container)}>
-      <p className={styles.message}>No data sources found</p>
+      <p className={styles.message}>
+        <Trans i18nKey="data-source-picker.list.no-data-source-message">No data sources found</Trans>
+      </p>
       <AddNewDataSourceButton onClick={onClickCTA} />
     </div>
   );
@@ -106,15 +115,15 @@ function EmptyState({ className, onClickCTA }: { className?: string; onClickCTA?
 
 function getEmptyStateStyles(theme: GrafanaTheme2) {
   return {
-    container: css`
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-    `,
-    message: css`
-      margin-bottom: ${theme.spacing(3)};
-    `,
+    container: css({
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'center',
+      alignItems: 'center',
+    }),
+    message: css({
+      marginBottom: theme.spacing(3),
+    }),
   };
 }
 
@@ -129,16 +138,16 @@ function getDataSourceVariableIDs() {
 
 function getStyles(theme: GrafanaTheme2, selectedItemCssSelector: string) {
   return {
-    container: css`
-      display: flex;
-      flex-direction: column;
-      ${selectedItemCssSelector} {
-        background-color: ${theme.colors.background.secondary};
-      }
-    `,
-    emptyState: css`
-      height: 100%;
-      flex: 1;
-    `,
+    container: css({
+      display: 'flex',
+      flexDirection: 'column',
+      [`${selectedItemCssSelector}`]: {
+        backgroundColor: theme.colors.background.secondary,
+      },
+    }),
+    emptyState: css({
+      height: '100%',
+      flex: 1,
+    }),
   };
 }

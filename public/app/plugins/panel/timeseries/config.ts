@@ -15,7 +15,7 @@ import {
   LineStyle,
   VisibilityMode,
   StackingMode,
-  GraphTresholdsStyleMode,
+  GraphThresholdsStyleMode,
   GraphTransform,
 } from '@grafana/schema';
 import { graphFieldOptions, commonOptionsBuilder } from '@grafana/ui';
@@ -32,12 +32,14 @@ export const defaultGraphConfig: GraphFieldConfig = {
   fillOpacity: 0,
   gradientMode: GraphGradientMode.None,
   barAlignment: BarAlignment.Center,
+  barWidthFactor: 0.6,
   stacking: {
     mode: StackingMode.None,
     group: 'A',
   },
   axisGridShow: true,
   axisCenteredZero: false,
+  axisBorderShow: false,
 };
 
 const categoryStyles = ['Graph styles'];
@@ -86,6 +88,19 @@ export function getGraphFieldConfig(cfg: GraphFieldConfig, isTime = true): SetFi
           defaultValue: cfg.barAlignment,
           settings: {
             options: graphFieldOptions.barAlignment,
+          },
+          showIf: (config) => config.drawStyle === GraphDrawStyle.Bars,
+        })
+        .addSliderInput({
+          path: 'barWidthFactor',
+          name: 'Bar width factor',
+          category: categoryStyles,
+          defaultValue: cfg.barWidthFactor,
+          settings: {
+            min: 0.1,
+            max: 1.0,
+            step: 0.1,
+            ariaLabelForHandle: 'Bar width factor',
           },
           showIf: (config) => config.drawStyle === GraphDrawStyle.Bars,
         })
@@ -227,7 +242,7 @@ export function getGraphFieldConfig(cfg: GraphFieldConfig, isTime = true): SetFi
         path: 'thresholdsStyle',
         name: 'Show thresholds',
         category: ['Thresholds'],
-        defaultValue: { mode: GraphTresholdsStyleMode.Off },
+        defaultValue: { mode: GraphThresholdsStyleMode.Off },
         settings: {
           options: graphFieldOptions.thresholdsDisplayModes,
         },

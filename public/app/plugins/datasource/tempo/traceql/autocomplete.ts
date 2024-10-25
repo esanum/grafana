@@ -1,34 +1,254 @@
+import { IMarkdownString } from 'monaco-editor';
+
 import { SelectableValue } from '@grafana/data';
 import { isFetchError } from '@grafana/runtime';
 import type { Monaco, monacoTypes } from '@grafana/ui';
 
-import { createErrorNotification } from '../../../../core/copy/appNotification';
-import { notifyApp } from '../../../../core/reducers/appNotification';
-import { dispatch } from '../../../../store/store';
 import TempoLanguageProvider from '../language_provider';
 
-import { intrinsics, scopes } from './traceql';
+import { getSituation, Situation } from './situation';
+import { scopes } from './traceql';
+
+type MinimalCompletionItem = {
+  label: string;
+  insertText: string;
+  detail?: string;
+  documentation?: string | IMarkdownString;
+};
+
+export type CompletionItemType = 'TAG_NAME' | 'TAG_VALUE' | 'KEYWORD' | 'OPERATOR' | 'SCOPE' | 'FUNCTION';
+type CompletionItem = MinimalCompletionItem & {
+  type: CompletionItemType;
+  insertTextRules?: monacoTypes.languages.CompletionItemInsertTextRule; // we used it to position the cursor
+};
 
 interface Props {
   languageProvider: TempoLanguageProvider;
+  setAlertText: (text?: string) => void;
 }
 
 /**
  * Class that implements CompletionItemProvider interface and allows us to provide suggestion for the Monaco
  * autocomplete system.
+ *
+ * Here we want to provide suggestions for TraceQL. Please refer to
+ * https://grafana.com/docs/tempo/latest/traceql for the syntax of the language.
  */
 export class CompletionProvider implements monacoTypes.languages.CompletionItemProvider {
   languageProvider: TempoLanguageProvider;
   registerInteractionCommandId: string | null;
+  setAlertText: (text?: string) => void;
 
   constructor(props: Props) {
     this.languageProvider = props.languageProvider;
+    this.setAlertText = props.setAlertText;
     this.registerInteractionCommandId = null;
   }
 
   triggerCharacters = ['{', '.', '[', '(', '=', '~', ' ', '"'];
-  static readonly operators: string[] = ['=', '-', '+', '<', '>', '>=', '<=', '=~'];
-  static readonly logicalOps: string[] = ['&&', '||'];
+
+  // Operators
+  static readonly arithmeticOps: MinimalCompletionItem[] = [
+    {
+      label: '+',
+      insertText: '+',
+      detail: 'Plus',
+    },
+    {
+      label: '-',
+      insertText: '-',
+      detail: 'Minus',
+    },
+    {
+      label: '*',
+      insertText: '*',
+      detail: 'Times',
+    },
+    {
+      label: '/',
+      insertText: '/',
+      detail: 'Over',
+    },
+  ];
+
+  static readonly logicalOps: MinimalCompletionItem[] = [
+    {
+      label: '&&',
+      insertText: '&&',
+      detail: 'And',
+      documentation: 'And (intersection) operator. Checks that both conditions found matches.',
+    },
+    {
+      label: '||',
+      insertText: '||',
+      detail: 'Or',
+      documentation: 'Or (union) operator. Checks that either condition found matches.',
+    },
+  ];
+
+  static readonly comparisonOps: MinimalCompletionItem[] = [
+    {
+      label: '=',
+      insertText: '=',
+      detail: 'Equality',
+    },
+    {
+      label: '!=',
+      insertText: '!=',
+      detail: 'Inequality',
+    },
+    {
+      label: '>',
+      insertText: '>',
+      detail: 'Greater than',
+    },
+    {
+      label: '>=',
+      insertText: '>=',
+      detail: 'Greater than or equal to',
+    },
+    {
+      label: '<',
+      insertText: '<',
+      detail: 'Less than',
+    },
+    {
+      label: '<=',
+      insertText: '<=',
+      detail: 'Less than or equal to',
+    },
+    {
+      label: '=~',
+      insertText: '=~',
+      detail: 'Regular expression',
+    },
+    {
+      label: '!~',
+      insertText: '!~',
+      detail: 'Negated regular expression',
+    },
+  ];
+  static readonly structuralOps: MinimalCompletionItem[] = [
+    {
+      label: '>>',
+      insertText: '>>',
+      detail: 'Descendant',
+      documentation:
+        'Descendant operator. Looks for spans matching {condB} that are descendants of a span matching {condA}',
+    },
+    {
+      label: '>',
+      insertText: '>',
+      detail: 'Child',
+      documentation:
+        'Child operator. Looks for spans matching {condB} that are direct child spans of a parent matching {condA}',
+    },
+    {
+      label: '<<',
+      insertText: '<<',
+      detail: 'Ancestor',
+      documentation:
+        'Ancestor operator. Looks for spans matching {condB} that are ancestors of a span matching {condA}',
+    },
+    {
+      label: '<',
+      insertText: '<',
+      detail: 'Parent',
+      documentation:
+        'Parent operator. Looks for spans matching {condB} that are direct parent spans of a child matching {condA}',
+    },
+    {
+      label: '~',
+      insertText: '~',
+      detail: 'Sibling',
+      documentation:
+        'Sibling operator. Checks that spans matching {condA} and {condB} are siblings of the same parent span.',
+    },
+  ];
+
+  static readonly spansetOps: MinimalCompletionItem[] = [
+    {
+      label: '|',
+      insertText: '|',
+      detail: 'Pipe',
+    },
+    ...CompletionProvider.logicalOps,
+    ...CompletionProvider.structuralOps,
+  ];
+
+  // Functions (aggregator, selector, and combining operators)
+  static readonly aggregatorFunctions: MinimalCompletionItem[] = [
+    {
+      label: 'avg',
+      insertText: 'avg($0)',
+      detail: 'Average of attribute',
+      documentation: 'Computes the average of a given numeric attribute or intrinsic for a spanset.',
+    },
+    {
+      label: 'count',
+      insertText: 'count()$0',
+      detail: 'Number of spans',
+      documentation: 'Counts the number of spans in a spanset.',
+    },
+    {
+      label: 'max',
+      insertText: 'max($0)',
+      detail: 'Max value of attribute',
+      documentation: 'Computes the maximum value of a given numeric attribute or intrinsic for a spanset.',
+    },
+    {
+      label: 'min',
+      insertText: 'min($0)',
+      detail: 'Min value of attribute',
+      documentation: 'Computes the minimum value of a given numeric attribute or intrinsic for a spanset.',
+    },
+    {
+      label: 'sum',
+      insertText: 'sum($0)',
+      detail: 'Sum value of attribute',
+      documentation: 'Computes the sum value of a given numeric attribute or intrinsic for a spanset.',
+    },
+  ];
+
+  static readonly functions: MinimalCompletionItem[] = [
+    ...this.aggregatorFunctions,
+    {
+      label: 'by',
+      insertText: 'by($0)',
+      detail: 'Grouping of attributes',
+      documentation: 'Groups by arbitrary attributes.',
+    },
+    {
+      label: 'count_over_time',
+      insertText: 'count_over_time()$0',
+      detail: 'Number of spans over time',
+      documentation: 'Counts the number of spans over time.',
+    },
+    {
+      label: 'histogram_over_time',
+      insertText: 'histogram_over_time($0)',
+      detail: 'Histogram of attribute over time',
+      documentation: 'Retrieves a histogram of an attributes values over time which are sorted into buckets.',
+    },
+    {
+      label: 'quantile_over_time',
+      insertText: 'quantile_over_time($0)',
+      detail: 'Quantile of attribute over time',
+      documentation: 'Retrieves one or more quantiles of an attributes numeric values over time.',
+    },
+    {
+      label: 'rate',
+      insertText: 'rate()$0',
+      detail: 'Rate of spans',
+      documentation: 'Counts the rate of spans per second.',
+    },
+    {
+      label: 'select',
+      insertText: 'select($0)',
+      detail: 'Selection of fields',
+      documentation: 'Selects arbitrary fields from spans.',
+    },
+  ];
 
   // We set these directly and ae required for the provider to function.
   monaco: Monaco | undefined;
@@ -52,8 +272,8 @@ export class CompletionProvider implements monacoTypes.languages.CompletionItemP
     }
 
     const { range, offset } = getRangeAndOffset(this.monaco, model, position);
-    const situation = this.getSituation(model.getValue(), offset);
-    const completionItems = this.getCompletions(situation);
+    const situation = getSituation(model.getValue(), offset);
+    const completionItems = situation != null ? this.getCompletions(situation, this.setAlertText) : Promise.resolve([]);
 
     return completionItems.then((items) => {
       // monaco by-default alphabetically orders the items.
@@ -65,6 +285,9 @@ export class CompletionProvider implements monacoTypes.languages.CompletionItemP
           kind: getMonacoCompletionItemKind(item.type, this.monaco!),
           label: item.label,
           insertText: item.insertText,
+          insertTextRules: item.insertTextRules,
+          detail: item.detail,
+          documentation: item.documentation,
           sortText: index.toString().padStart(maxIndexDigits, '0'), // to force the order we have
           range,
           command: {
@@ -87,14 +310,15 @@ export class CompletionProvider implements monacoTypes.languages.CompletionItemP
     this.registerInteractionCommandId = id;
   }
 
-  private async getTagValues(tagName: string): Promise<Array<SelectableValue<string>>> {
+  private async getTagValues(tagName: string, query: string): Promise<Array<SelectableValue<string>>> {
     let tagValues: Array<SelectableValue<string>>;
+    const cacheKey = `${tagName}:${query}`;
 
-    if (this.cachedValues.hasOwnProperty(tagName)) {
-      tagValues = this.cachedValues[tagName];
+    if (this.cachedValues.hasOwnProperty(cacheKey)) {
+      tagValues = this.cachedValues[cacheKey];
     } else {
-      tagValues = await this.languageProvider.getOptionsV2(tagName);
-      this.cachedValues[tagName] = tagValues;
+      tagValues = await this.languageProvider.getOptionsV2(tagName, query);
+      this.cachedValues[cacheKey] = tagValues;
     }
     return tagValues;
   }
@@ -104,15 +328,15 @@ export class CompletionProvider implements monacoTypes.languages.CompletionItemP
    * @param situation
    * @private
    */
-  private async getCompletions(situation: Situation): Promise<Completion[]> {
+  private async getCompletions(situation: Situation, setAlertText: (text?: string) => void): Promise<CompletionItem[]> {
     switch (situation.type) {
-      // Not really sure what would make sense to suggest in this case so just leave it
+      // This should only happen for cases that we do not support yet
       case 'UNKNOWN': {
         return [];
       }
       case 'EMPTY': {
-        return this.getScopesCompletions('{ ')
-          .concat(this.getIntrinsicsCompletions('{ '))
+        return this.getScopesCompletions('{ ', '$0 }')
+          .concat(this.getIntrinsicsCompletions('{ ', '$0 }'))
           .concat(this.getTagsCompletions('{ .'));
       }
       case 'SPANSET_EMPTY':
@@ -120,29 +344,51 @@ export class CompletionProvider implements monacoTypes.languages.CompletionItemP
       case 'SPANSET_ONLY_DOT': {
         return this.getTagsCompletions();
       }
+      case 'SPANSET_IN_THE_MIDDLE':
+      case 'SPANSET_EXPRESSION_OPERATORS_WITH_MISSING_CLOSED_BRACE':
+        return this.getOperatorsCompletions([...CompletionProvider.comparisonOps, ...CompletionProvider.logicalOps]);
       case 'SPANSET_IN_NAME':
         return this.getScopesCompletions().concat(this.getIntrinsicsCompletions()).concat(this.getTagsCompletions());
       case 'SPANSET_IN_NAME_SCOPE':
         return this.getTagsCompletions(undefined, situation.scope);
-      case 'SPANSET_AFTER_NAME':
-        return CompletionProvider.operators.map((key) => ({
-          label: key,
-          insertText: key,
-          type: 'OPERATOR',
+      case 'SPANSET_EXPRESSION_OPERATORS':
+        return this.getOperatorsCompletions([
+          ...CompletionProvider.comparisonOps,
+          ...CompletionProvider.logicalOps,
+          ...CompletionProvider.arithmeticOps,
+        ]);
+      case 'SPANFIELD_COMBINING_OPERATORS':
+        return this.getOperatorsCompletions([
+          ...CompletionProvider.logicalOps,
+          ...CompletionProvider.arithmeticOps,
+          ...CompletionProvider.comparisonOps,
+        ]);
+      case 'SPANSET_COMBINING_OPERATORS':
+        return this.getOperatorsCompletions(CompletionProvider.spansetOps);
+      case 'SPANSET_PIPELINE_AFTER_OPERATOR':
+        const functions = CompletionProvider.functions.map((key) => ({
+          ...key,
+          insertTextRules: this.monaco?.languages.CompletionItemInsertTextRule?.InsertAsSnippet,
+          type: 'FUNCTION' as const,
         }));
+        const tags = this.getScopesCompletions()
+          .concat(this.getIntrinsicsCompletions())
+          .concat(this.getTagsCompletions('.'));
+        return [...functions, ...tags];
+      case 'SPANSET_COMPARISON_OPERATORS':
+        return this.getOperatorsCompletions(CompletionProvider.comparisonOps);
       case 'SPANSET_IN_VALUE':
         let tagValues;
         try {
-          tagValues = await this.getTagValues(situation.tagName);
+          tagValues = await this.getTagValues(situation.tagName, situation.query);
+          setAlertText(undefined);
         } catch (error) {
           if (isFetchError(error)) {
-            dispatch(notifyApp(createErrorNotification(error.data.error, new Error(error.data.message))));
+            setAlertText(error.data.error);
           } else if (error instanceof Error) {
-            dispatch(notifyApp(createErrorNotification('Error', error)));
+            setAlertText(`Error: ${error.message}`);
           }
         }
-
-        const items: Completion[] = [];
 
         const getInsertionText = (val: SelectableValue<string>): string => {
           if (situation.betweenQuotes) {
@@ -151,6 +397,7 @@ export class CompletionProvider implements monacoTypes.languages.CompletionItemP
           return val.type === 'string' ? `"${val.label}"` : val.label!;
         };
 
+        const items: CompletionItem[] = [];
         tagValues?.forEach((val) => {
           if (val?.label) {
             items.push({
@@ -162,17 +409,23 @@ export class CompletionProvider implements monacoTypes.languages.CompletionItemP
         });
         return items;
       case 'SPANSET_AFTER_VALUE':
-        return CompletionProvider.logicalOps.concat('}').map((key) => ({
-          label: key,
-          insertText: key,
+        return CompletionProvider.logicalOps.map((key) => ({
+          label: key.label,
+          insertText: key.insertText + '}',
           type: 'OPERATOR',
         }));
+      case 'NEW_SPANSET':
+        return this.getScopesCompletions('{ ', '$0 }')
+          .concat(this.getIntrinsicsCompletions('{ ', '$0 }'))
+          .concat(this.getTagsCompletions('.'));
+      case 'ATTRIBUTE_FOR_FUNCTION':
+        return this.getScopesCompletions().concat(this.getIntrinsicsCompletions()).concat(this.getTagsCompletions('.'));
       default:
         throw new Error(`Unexpected situation ${situation}`);
     }
   }
 
-  private getTagsCompletions(prepend?: string, scope?: string): Completion[] {
+  private getTagsCompletions(prepend?: string, scope?: string): CompletionItem[] {
     const tags = this.languageProvider.getTraceqlAutocompleteTags(scope);
     return tags
       .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'accent' }))
@@ -183,129 +436,29 @@ export class CompletionProvider implements monacoTypes.languages.CompletionItemP
       }));
   }
 
-  private getIntrinsicsCompletions(prepend?: string): Completion[] {
-    return intrinsics.map((key) => ({
+  private getIntrinsicsCompletions(prepend?: string, append?: string): CompletionItem[] {
+    return this.languageProvider.getIntrinsics().map((key) => ({
       label: key,
-      insertText: (prepend || '') + key,
+      insertText: (prepend || '') + key + (append || ''),
       type: 'KEYWORD',
+      insertTextRules: this.monaco?.languages.CompletionItemInsertTextRule?.InsertAsSnippet,
     }));
   }
 
-  private getScopesCompletions(prepend?: string): Completion[] {
+  private getScopesCompletions(prepend?: string, append?: string): CompletionItem[] {
     return scopes.map((key) => ({
       label: key,
-      insertText: (prepend || '') + key,
+      insertText: (prepend || '') + key + (append || ''),
       type: 'SCOPE',
+      insertTextRules: this.monaco?.languages.CompletionItemInsertTextRule?.InsertAsSnippet,
     }));
   }
 
-  private getSituationInSpanSet(textUntilCaret: string): Situation {
-    const nameRegex = /(?<name>[\w./-]+)?/;
-    const opRegex = /(?<op>[!=+\-<>]+)/;
-    // only allow spaces in the value if it's enclosed by quotes
-    const valueRegex = /(?<value>(?<open_quote>")([^"\n&|]+)?(?<close_quote>")?|([^"\n\s&|]+))?/;
-
-    // prettier-ignore
-    const fullRegex = new RegExp(
-      '([\\s{])' +      // Space(s) or initial opening bracket {
-      '(' +                   // Open full set group
-      nameRegex.source +
-      '(?<space1>\\s*)' +     // Optional space(s) between name and operator
-      '(' +                   // Open operator + value group
-      opRegex.source +
-      '(?<space2>\\s*)' +     // Optional space(s) between operator and value
-      valueRegex.source +
-      ')?' +                  // Close operator + value group
-      ')' +                   // Close full set group
-      '(?<space3>\\s*)$'      // Optional space(s) at the end of the set
-    );
-
-    const matched = textUntilCaret.match(fullRegex);
-
-    if (matched) {
-      const nameFull = matched.groups?.name;
-      const op = matched.groups?.op;
-
-      if (!nameFull) {
-        return {
-          type: 'SPANSET_EMPTY',
-        };
-      }
-
-      if (nameFull === '.') {
-        return {
-          type: 'SPANSET_ONLY_DOT',
-        };
-      }
-
-      const nameMatched = nameFull.match(/^(?<pre_dot>\.)?(?<word>\w[\w./-]*\w)(?<post_dot>\.)?$/);
-
-      // We already have a (potentially partial) tag name so let's check if there's an operator declared
-      // { .tag_name|
-      if (!op) {
-        // There's no operator so we check if the name is one of the known scopes
-        // { resource.|
-        if (scopes.filter((w) => w === nameMatched?.groups?.word) && nameMatched?.groups?.post_dot) {
-          return {
-            type: 'SPANSET_IN_NAME_SCOPE',
-            scope: nameMatched?.groups?.word || '',
-          };
-        }
-        // It's not one of the scopes, so we now check if we're after the name (there's a space after the word) or if we still have to autocomplete the rest of the name
-        // In case there's a space we start autocompleting the operators { .http.method |
-        // Otherwise we keep showing the tags/intrinsics/scopes list { .http.met|
-        return {
-          type: matched.groups?.space1 ? 'SPANSET_AFTER_NAME' : 'SPANSET_IN_NAME',
-        };
-      }
-
-      // In case there's a space after the full [name + operator + value] group we can start autocompleting logical operators or close the spanset
-      // To avoid triggering this situation when we are writing a space inside a string we check the state of the open and close quotes
-      // { .http.method = "GET" |
-      if (matched.groups?.space3 && matched.groups.open_quote === matched.groups.close_quote) {
-        return {
-          type: 'SPANSET_AFTER_VALUE',
-        };
-      }
-
-      // We already have an operator and know that the set isn't complete so let's autocomplete the possible values for the tag name
-      // { .http.method = |
-      return {
-        type: 'SPANSET_IN_VALUE',
-        tagName: nameFull,
-        betweenQuotes: !!matched.groups?.open_quote,
-      };
-    }
-
-    return {
-      type: 'EMPTY',
-    };
-  }
-
-  /**
-   * Figure out where is the cursor and what kind of suggestions are appropriate.
-   * @param text
-   * @param offset
-   */
-  private getSituation(text: string, offset: number): Situation {
-    if (text === '' || offset === 0) {
-      return {
-        type: 'EMPTY',
-      };
-    }
-
-    const textUntilCaret = text.substring(0, offset);
-
-    // Check if we're inside a span set
-    let isInSpanSet = textUntilCaret.lastIndexOf('{') > textUntilCaret.lastIndexOf('}');
-    if (isInSpanSet) {
-      return this.getSituationInSpanSet(textUntilCaret);
-    }
-
-    // Will happen only if user writes something that isn't really a tag selector
-    return {
-      type: 'UNKNOWN',
-    };
+  private getOperatorsCompletions(ops: MinimalCompletionItem[]): CompletionItem[] {
+    return ops.map((key) => ({
+      ...key,
+      type: 'OPERATOR',
+    }));
   }
 }
 
@@ -314,7 +467,10 @@ export class CompletionProvider implements monacoTypes.languages.CompletionItemP
  * @param type
  * @param monaco
  */
-function getMonacoCompletionItemKind(type: CompletionType, monaco: Monaco): monacoTypes.languages.CompletionItemKind {
+function getMonacoCompletionItemKind(
+  type: CompletionItemType,
+  monaco: Monaco
+): monacoTypes.languages.CompletionItemKind {
   switch (type) {
     case 'TAG_NAME':
       return monaco.languages.CompletionItemKind.Enum;
@@ -326,54 +482,12 @@ function getMonacoCompletionItemKind(type: CompletionType, monaco: Monaco): mona
       return monaco.languages.CompletionItemKind.EnumMember;
     case 'SCOPE':
       return monaco.languages.CompletionItemKind.Class;
+    case 'FUNCTION':
+      return monaco.languages.CompletionItemKind.Function;
     default:
-      throw new Error(`Unexpected CompletionType: ${type}`);
+      throw new Error(`Unexpected CompletionItemType: ${type}`);
   }
 }
-
-export type CompletionType = 'TAG_NAME' | 'TAG_VALUE' | 'KEYWORD' | 'OPERATOR' | 'SCOPE';
-type Completion = {
-  type: CompletionType;
-  label: string;
-  insertText: string;
-};
-
-export type Tag = {
-  name: string;
-  value: string;
-};
-
-export type Situation =
-  | {
-      type: 'UNKNOWN';
-    }
-  | {
-      type: 'EMPTY';
-    }
-  | {
-      type: 'SPANSET_EMPTY';
-    }
-  | {
-      type: 'SPANSET_ONLY_DOT';
-    }
-  | {
-      type: 'SPANSET_AFTER_NAME';
-    }
-  | {
-      type: 'SPANSET_IN_NAME';
-    }
-  | {
-      type: 'SPANSET_IN_NAME_SCOPE';
-      scope: string;
-    }
-  | {
-      type: 'SPANSET_IN_VALUE';
-      tagName: string;
-      betweenQuotes: boolean;
-    }
-  | {
-      type: 'SPANSET_AFTER_VALUE';
-    };
 
 function getRangeAndOffset(monaco: Monaco, model: monacoTypes.editor.ITextModel, position: monacoTypes.Position) {
   const word = model.getWordAtPosition(position);
@@ -406,7 +520,7 @@ function getRangeAndOffset(monaco: Monaco, model: monacoTypes.editor.ITextModel,
  */
 function fixSuggestion(
   suggestion: monacoTypes.languages.CompletionItem,
-  itemType: CompletionType,
+  itemType: CompletionItemType,
   model: monacoTypes.editor.ITextModel,
   offset: number
 ) {
@@ -414,7 +528,7 @@ function fixSuggestion(
     const match = model
       .getValue()
       .substring(0, offset)
-      .match(/(span\.|resource\.|\.)?([\w./-]*)$/);
+      .match(/(event\.|instrumentation\.|link\.|resource\.|span\.|\.)?([\w./-]*)$/);
 
     if (match) {
       const scope = match[1];

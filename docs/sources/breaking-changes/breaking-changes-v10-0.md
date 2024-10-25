@@ -1,5 +1,5 @@
 ---
-description: Breaking changes for Grafana v10.0
+description: Learn about breaking changes in Grafana v10.0
 keywords:
   - grafana
   - breaking changes
@@ -81,7 +81,7 @@ Grafana legacy alerting (dashboard alerts) has been deprecated since Grafana v9.
 
 #### Migration path
 
-The new Grafana Alerting was introduced in Grafana 8 and is a superset of legacy alerting. Learn how to migrate your alerts in the [Upgrade Alerting documentation]({{< relref "../alerting/set-up/migrating-alerts/" >}}).
+The new Grafana Alerting was introduced in Grafana 8 and is a superset of legacy alerting. Learn how to migrate your alerts in the [Upgrade Alerting documentation](https://grafana.com/docs/grafana/v10.4/alerting/set-up/migrating-alerts/).
 
 ### API keys are migrating to service accounts
 
@@ -99,11 +99,11 @@ Grafana's [HTTP API endpoints for generating and managing API Keys]({{< relref "
 
 #### Migration path
 
-While upgrading to Grafana v10, you don't need to take any action; your API keys will be automatically migrated. To test or perform the migration from API keys to service accounts before upgrading to Grafana v10, follow our [migration documentation]({{< relref "../administration/api-keys/#migrate-api-keys-to-grafana-service-account" >}}").
+While upgrading to Grafana v10, you don't need to take any action; your API keys will be automatically migrated. To test or perform the migration from API keys to service accounts before upgrading to Grafana v10, follow our [migration documentation](https://grafana.com/docs/grafana/<GRAFANA_VERSION>/administration/service-accounts/migrate-api-keys/).
 
 #### Learn more
 
-- [Documentation on migrating from API keys to service accounts]({{< relref "../administration/api-keys/" >}})
+- [Documentation on migrating from API keys to service accounts](https://grafana.com/docs/grafana/<GRAFANA_VERSION>/administration/service-accounts/migrate-api-keys/)
 
 - [Blog post announcement with a video demo including how to migrate](https://grafana.com/blog/2022/08/24/new-in-grafana-9.1-service-accounts-are-now-ga/)
 
@@ -192,7 +192,7 @@ We strongly recommend not doing this in case you are using Azure AD as an identi
 
 #### Learn more
 
-- [CVE-2023-3128 Advisory](https://grafana.com/security/security-advisories/CVE-2023-3128)
+- [CVE-2023-3128 Advisory](https://grafana.com/security/security-advisories/cve-2023-3128/)
 - [Enable email lookup]({{< relref "../setup-grafana/configure-security/configure-authentication/" >}})
 
 ### The "Alias" field in the CloudWatch data source is removed
@@ -343,7 +343,7 @@ Here are some of the benefits of create-plugin:
 
 - **Improved testing capabilities:** Testing plugins with @grafana/create-plugin is much easier with GitHub workflows that automate unit and e2e test runs whenever changes are pushed to GitHub.
 
-- **Better documentation:** The [documentation](https://grafana.github.io/plugin-tools/docs/creating-a-plugin) for @grafana/create-plugin is more comprehensive and easier to discover than that of @grafana/toolkit.
+- **Better documentation:** The [documentation](https://grafana.com/developers/plugin-tools/) for @grafana/create-plugin is more comprehensive and easier to discover than that of @grafana/toolkit.
 
 #### Migration path
 
@@ -361,7 +361,7 @@ npx @grafana/create-plugin@latest migrate
 
 #### Learn more
 
-- [Migration guide](https://grafana.github.io/plugin-tools/docs/migrating-from-toolkit/)
+- [Migration guide](https://grafana.com/developers/plugin-tools/migration-guides/migrate-from-toolkit)
 
 ## Deprecations
 

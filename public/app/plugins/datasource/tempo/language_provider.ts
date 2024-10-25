@@ -1,8 +1,19 @@
 import { LanguageProvider, SelectableValue } from '@grafana/data';
+import { getTemplateSrv } from '@grafana/runtime';
+import { VariableFormatID } from '@grafana/schema';
 
-import { getAllTags, getTagsByScope, getUnscopedTags } from './SearchTraceQLEditor/utils';
-import { TraceqlSearchScope } from './dataquery.gen';
+import {
+  getAllTags,
+  getIntrinsicTags,
+  getTagsByScope,
+  getUnscopedTags,
+  scopeHelper,
+  tagHelper,
+  valueHelper,
+} from './SearchTraceQLEditor/utils';
+import { TraceqlFilter, TraceqlSearchScope } from './dataquery.gen';
 import { TempoDatasource } from './datasource';
+import { intrinsicsV1 } from './traceql/traceql';
 import { Scope } from './types';
 
 export default class TempoLanguageProvider extends LanguageProvider {
@@ -54,6 +65,13 @@ export default class TempoLanguageProvider extends LanguageProvider {
     this.tagsV2 = tags;
   };
 
+  getIntrinsics = () => {
+    if (this.tagsV2) {
+      return getIntrinsicTags(this.tagsV2);
+    }
+    return intrinsicsV1;
+  };
+
   getTags = (scope?: TraceqlSearchScope) => {
     if (this.tagsV2 && scope) {
       if (scope === TraceqlSearchScope.Unscoped) {
@@ -66,6 +84,18 @@ export default class TempoLanguageProvider extends LanguageProvider {
       if (!this.tagsV1.find((t) => t === 'status')) {
         this.tagsV1.push('status');
       }
+      return this.tagsV1;
+    }
+    return [];
+  };
+
+  getMetricsSummaryTags = (scope?: TraceqlSearchScope) => {
+    if (this.tagsV2 && scope) {
+      if (scope === TraceqlSearchScope.Unscoped) {
+        return getUnscopedTags(this.tagsV2);
+      }
+      return getTagsByScope(this.tagsV2, scope);
+    } else if (this.tagsV1) {
       return this.tagsV1;
     }
     return [];
@@ -106,7 +136,8 @@ export default class TempoLanguageProvider extends LanguageProvider {
   };
 
   async getOptionsV1(tag: string): Promise<Array<SelectableValue<string>>> {
-    const response = await this.request(`/api/search/tag/${tag}/values`);
+    const encodedTag = this.encodeTag(tag);
+    const response = await this.request(`/api/search/tag/${encodedTag}/values`);
     let options: Array<SelectableValue<string>> = [];
     if (response && response.tagValues) {
       options = response.tagValues.map((v: string) => ({
@@ -117,16 +148,47 @@ export default class TempoLanguageProvider extends LanguageProvider {
     return options;
   }
 
-  async getOptionsV2(tag: string): Promise<Array<SelectableValue<string>>> {
-    const response = await this.request(`/api/v2/search/tag/${tag}/values`);
+  async getOptionsV2(tag: string, query?: string): Promise<Array<SelectableValue<string>>> {
+    const encodedTag = this.encodeTag(tag);
+    const response = await this.request(
+      `/api/v2/search/tag/${encodedTag}/values`,
+      query ? { q: getTemplateSrv().replace(query, {}, VariableFormatID.Pipe) } : {}
+    );
     let options: Array<SelectableValue<string>> = [];
     if (response && response.tagValues) {
-      options = response.tagValues.map((v: { type: string; value: string }) => ({
-        type: v.type,
-        value: v.value,
-        label: v.value,
-      }));
+      response.tagValues.forEach((v: { type: string; value?: string }) => {
+        if (v.value) {
+          options.push({
+            type: v.type,
+            value: v.value,
+            label: v.value,
+          });
+        }
+      });
     }
     return options;
+  }
+
+  /**
+   * Encode (serialize) a given tag for use in a URL.
+   *
+   * @param tag the tag to encode
+   * @returns the encoded tag
+   */
+  private encodeTag = (tag: string): string => {
+    // If we call `encodeURIComponent` only once, we still get an error when issuing a request to the backend
+    // Reference: https://stackoverflow.com/a/37456192
+    return encodeURIComponent(encodeURIComponent(tag));
+  };
+
+  generateQueryFromFilters(filters: TraceqlFilter[]) {
+    if (!filters) {
+      return '';
+    }
+
+    return `{${filters
+      .filter((f) => f.tag && f.operator && f.value?.length)
+      .map((f) => `${scopeHelper(f, this)}${tagHelper(f, filters)}${f.operator}${valueHelper(f)}`)
+      .join(' && ')}}`;
   }
 }

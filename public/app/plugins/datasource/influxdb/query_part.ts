@@ -3,7 +3,7 @@ import { clone, map } from 'lodash';
 import { functionRenderer, QueryPart, QueryPartDef, suffixRenderer } from 'app/features/alerting/state/query_part';
 
 const index: any[] = [];
-const categories: any = {
+const categories = {
   Aggregations: [],
   Selectors: [],
   Transformations: [],
@@ -13,7 +13,7 @@ const categories: any = {
   Fields: [],
 };
 
-function createPart(part: any): any {
+function createPart(part: any) {
   const def = index[part.type];
   if (!def) {
     throw { message: 'Could not find query part ' + part.type };
@@ -140,7 +140,7 @@ function addAliasStrategy(selectParts: any[], partModel: any) {
 
 function addFieldStrategy(selectParts: any, partModel: any, query: { selectModels: any[][] }) {
   // copy all parts
-  const parts = map(selectParts, (part: any) => {
+  const parts = map(selectParts, (part) => {
     return createPart({ type: part.def.type, params: clone(part.params) });
   });
 

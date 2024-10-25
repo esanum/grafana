@@ -26,7 +26,6 @@ import (
 	"github.com/grafana/grafana/pkg/infra/log"
 	"github.com/grafana/grafana/pkg/infra/tracing"
 	"github.com/grafana/grafana/pkg/setting"
-	"github.com/grafana/grafana/pkg/tsdb/legacydata"
 )
 
 var logger = log.New("tsdb.graphite")
@@ -55,8 +54,8 @@ type datasourceInfo struct {
 }
 
 func newInstanceSettings(httpClientProvider httpclient.Provider) datasource.InstanceFactoryFunc {
-	return func(settings backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
-		opts, err := settings.HTTPClientOptions()
+	return func(ctx context.Context, settings backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
+		opts, err := settings.HTTPClientOptions(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -143,17 +142,18 @@ func (s *Service) QueryData(ctx context.Context, req *backend.QueryDataRequest) 
 	defer span.End()
 
 	targetStr := strings.Join(formData["target"], ",")
-	span.SetAttributes("target", targetStr, attribute.Key("target").String(targetStr))
-	span.SetAttributes("from", from, attribute.Key("from").String(from))
-	span.SetAttributes("until", until, attribute.Key("until").String(until))
-	span.SetAttributes("datasource_id", dsInfo.Id, attribute.Key("datasource_id").Int64(dsInfo.Id))
-	span.SetAttributes("org_id", req.PluginContext.OrgID, attribute.Key("org_id").Int64(req.PluginContext.OrgID))
-
+	span.SetAttributes(
+		attribute.String("target", targetStr),
+		attribute.String("from", from),
+		attribute.String("until", until),
+		attribute.Int64("datasource_id", dsInfo.Id),
+		attribute.Int64("org_id", req.PluginContext.OrgID),
+	)
 	s.tracer.Inject(ctx, graphiteReq.Header, span)
 
 	res, err := dsInfo.HTTPClient.Do(graphiteReq)
 	if res != nil {
-		span.SetAttributes("graphite.response.code", res.StatusCode, attribute.Key("graphite.response.code").Int(res.StatusCode))
+		span.SetAttributes(attribute.Int("graphite.response.code", res.StatusCode))
 	}
 	if err != nil {
 		span.RecordError(err)
@@ -164,7 +164,7 @@ func (s *Service) QueryData(ctx context.Context, req *backend.QueryDataRequest) 
 	defer func() {
 		err := res.Body.Close()
 		if err != nil {
-			logger.Warn("failed to close response body", "error", err)
+			logger.Warn("Failed to close response body", "error", err)
 		}
 	}()
 
@@ -206,7 +206,7 @@ func (s *Service) processQueries(logger log.Logger, queries []backend.DataQuery)
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		logger.Debug("graphite", "query", model)
+		logger.Debug("Graphite", "query", model)
 		currTarget := ""
 		if fullTarget, err := model.Get(TargetFullModelField).String(); err == nil {
 			currTarget = fullTarget
@@ -214,7 +214,7 @@ func (s *Service) processQueries(logger log.Logger, queries []backend.DataQuery)
 			currTarget = model.Get(TargetModelField).MustString()
 		}
 		if currTarget == "" {
-			logger.Debug("graphite", "empty query target", model)
+			logger.Debug("Graphite", "empty query target", model)
 			emptyQueries = append(emptyQueries, fmt.Sprintf("Query: %v has no target", model))
 			continue
 		}
@@ -295,6 +295,9 @@ func (s *Service) toDataFrames(logger log.Logger, response *http.Response, origR
 
 		tags := make(map[string]string)
 		for name, value := range series.Tags {
+			if name == "name" {
+				value = target
+			}
 			switch value := value.(type) {
 			case string:
 				tags[name] = value
@@ -350,7 +353,7 @@ func epochMStoGraphiteTime(tr backend.TimeRange) (string, string) {
 /**
  * Graphite should always return timestamp as a number but values might be nil when data is missing
  */
-func parseDataTimePoint(dataTimePoint legacydata.DataTimePoint) (time.Time, *float64, error) {
+func parseDataTimePoint(dataTimePoint DataTimePoint) (time.Time, *float64, error) {
 	if !dataTimePoint[1].Valid {
 		return time.Time{}, nil, errors.New("failed to parse data point timestamp")
 	}

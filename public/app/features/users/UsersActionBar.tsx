@@ -1,4 +1,3 @@
-import React from 'react';
 import { connect, ConnectedProps } from 'react-redux';
 
 import { RadioButtonGroup, LinkButton, FilterInput, InlineField } from '@grafana/ui';
@@ -22,7 +21,6 @@ function mapStateToProps(state: StoreState) {
     pendingInvitesCount: selectTotal(state.invites),
     externalUserMngLinkName: state.users.externalUserMngLinkName,
     externalUserMngLinkUrl: state.users.externalUserMngLinkUrl,
-    canInvite: state.users.canInvite,
   };
 }
 
@@ -35,7 +33,6 @@ const connector = connect(mapStateToProps, mapDispatchToProps);
 export type Props = ConnectedProps<typeof connector> & OwnProps;
 
 export const UsersActionBarUnconnected = ({
-  canInvite,
   externalUserMngLinkName,
   externalUserMngLinkUrl,
   searchQuery,
@@ -48,7 +45,7 @@ export const UsersActionBarUnconnected = ({
     { label: 'Users', value: 'users' },
     { label: `Pending Invites (${pendingInvitesCount})`, value: 'invites' },
   ];
-  const canAddToOrg: boolean = contextSrv.hasAccess(AccessControlAction.OrgUsersAdd, canInvite);
+  const canAddToOrg: boolean = contextSrv.hasPermission(AccessControlAction.OrgUsersAdd);
   // Show invite button in the following cases:
   // 1) the instance is not a hosted Grafana instance (!config.externalUserMngInfo)
   // 2) new basic auth users can be created for this instance (!config.disableLoginForm).

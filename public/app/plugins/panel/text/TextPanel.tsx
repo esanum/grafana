@@ -1,6 +1,6 @@
 import { css, cx } from '@emotion/css';
 import DangerouslySetHtmlContent from 'dangerously-set-html-content';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useDebounce } from 'react-use';
 
 import { GrafanaTheme2, PanelProps, renderTextPanelMarkdown, textUtil, InterpolateFunction } from '@grafana/data';
@@ -51,8 +51,9 @@ export function TextPanel(props: Props) {
   }
 
   return (
-    <CustomScrollbar autoHeightMin="100%">
+    <CustomScrollbar autoHeightMin="100%" className={styles.containStrict}>
       <DangerouslySetHtmlContent
+        allowRerender
         html={processed.content}
         className={styles.markdown}
         data-testid="TextPanel-converted-content"
@@ -63,13 +64,14 @@ export function TextPanel(props: Props) {
 
 function processContent(options: Options, interpolate: InterpolateFunction, disableSanitizeHtml: boolean): string {
   let { mode, content } = options;
-  if (!content) {
-    return '';
-  }
 
   // Variables must be interpolated before content is converted to markdown so using variables
   // in URLs work properly
   content = interpolate(content, {}, options.code?.language === 'json' ? 'json' : 'html');
+
+  if (!content) {
+    return ' ';
+  }
 
   switch (mode) {
     case TextMode.Code:
@@ -103,4 +105,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
       height: 100%;
     `
   ),
+  containStrict: css({
+    contain: 'strict',
+  }),
 });

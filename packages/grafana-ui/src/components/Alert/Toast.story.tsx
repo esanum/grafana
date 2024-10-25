@@ -1,11 +1,9 @@
 import { action } from '@storybook/addon-actions';
 import { StoryFn, Meta } from '@storybook/react';
-import React from 'react';
 
-import { Alert, AlertVariant, VerticalGroup } from '@grafana/ui';
+import { Alert, AlertVariant, Stack } from '@grafana/ui';
 
 import { StoryExample } from '../../utils/storybook/StoryExample';
-import { withCenteredStory, withHorizontallyCenteredStory } from '../../utils/storybook/withCenteredStory';
 
 import mdx from './Alert.mdx';
 
@@ -14,7 +12,6 @@ const severities: AlertVariant[] = ['error', 'warning', 'info', 'success'];
 const meta: Meta<typeof Alert> = {
   title: 'Overlays/Alert/Toast',
   component: Alert,
-  decorators: [withCenteredStory, withHorizontallyCenteredStory],
   parameters: {
     docs: {
       page: mdx,
@@ -33,21 +30,17 @@ const meta: Meta<typeof Alert> = {
 
 export const Basic: StoryFn<typeof Alert> = (args) => {
   return (
-    <div className="page-alert-list">
-      <Alert {...args} elevated>
-        <VerticalGroup>
-          <div>Child content that includes some alert details, like maybe what actually happened.</div>
-        </VerticalGroup>
-      </Alert>
-    </div>
+    <Alert {...args} elevated>
+      Child content that includes some alert details, like maybe what actually happened.
+    </Alert>
   );
 };
 
 export function Examples() {
   return (
-    <VerticalGroup>
+    <Stack direction="column">
       <StoryExample name="Severities">
-        <VerticalGroup>
+        <Stack direction="column">
           {severities.map((severity) => (
             <Alert
               title={`Severity: ${severity}`}
@@ -57,7 +50,7 @@ export function Examples() {
               elevated={true}
             />
           ))}
-        </VerticalGroup>
+        </Stack>
       </StoryExample>
       <StoryExample name="With huge payload">
         <Alert title="Alert with huge payload" severity="error" elevated={true}>
@@ -126,7 +119,7 @@ export function Examples() {
           Vivamus sit amet dui semper, suscipit est nec, elementum arcu. Praesent ante turpis, convallis ac leo eget,
         </Alert>
       </StoryExample>
-    </VerticalGroup>
+    </Stack>
   );
 }
 

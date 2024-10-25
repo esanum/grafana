@@ -1,7 +1,7 @@
 ---
 aliases:
   - ../guides/whats-new-in-v9-3/
-description: Feature and improvement highlights for Grafana v9.3
+description: Learn about new and updated features in Grafana v9.3
 keywords:
   - grafana
   - new
@@ -19,7 +19,7 @@ weight: -34
 
 # What's new in Grafana v9.3
 
-Welcome to Grafana 9.3! Read on to learn about our navigation overhaul, support for four new languages, new panels and transformations, several often-requested auth improvements, usability improvements to Alerting, and more. For even more detail about all the changes in this release, refer to the [changelog](https://github.com/grafana/grafana/blob/master/CHANGELOG.md).
+Welcome to Grafana 9.3! Read on to learn about our navigation overhaul, support for four new languages, new panels and transformations, several often-requested auth improvements, usability improvements to Alerting, and more. For even more detail about all the changes in this release, refer to the [changelog](https://github.com/grafana/grafana/blob/main/CHANGELOG.md).
 
 ## New navigation
 
@@ -87,7 +87,7 @@ Annotations are now supported in public dashboards, with the exception of query 
 
 Note that because Public Dashboards is an experimental feature, you need to enable it in Grafana using the `publicDashboards` [feature toggle]({{< relref "../setup-grafana/configure-grafana#feature_toggles" >}}), or open a support ticket requesting public dashboards if you are a Cloud Advanced customer.
 
-To learn more about public dashboards, refer to [Public dashboards]({{< relref "../dashboards/dashboard-public" >}}).
+To learn more about public dashboards, refer to [Public dashboards](https://grafana.com/docs/grafana/<GRAFANA_VERSION>/dashboards/share-dashboards-panels/shared-dashboards/).
 
 ## New transformation: Partition by values
 

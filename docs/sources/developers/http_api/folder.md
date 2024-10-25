@@ -28,11 +28,6 @@ The unique identifier (uid) of a folder can be used for uniquely identify folder
 
 The uid can have a maximum length of 40 characters.
 
-## A note about the General folder
-
-The General folder (id=0) is special and is not part of the Folder API which means
-that you cannot use this API for retrieving information about the General folder.
-
 ## Get all folders
 
 `GET /api/folders`
@@ -148,11 +143,11 @@ Creates a new folder.
 
 See note in the [introduction]({{< ref "#folder-api" >}}) for an explanation.
 
-`folders:create` allows creating folders in the root level. To create a subfolder, `folders:write` scoped to the parent folder is required in addition to `folders:create`.
+`folders:create` allows creating folders and subfolders. If granted with scope `folders:uid:general`, allows creating root level folders. Otherwise, allows creating subfolders under the specified folders.
 
 | Action           | Scope       |
 | ---------------- | ----------- |
-| `folders:create` | n/a         |
+| `folders:create` | `folders:*` |
 | `folders:write`  | `folders:*` |
 
 **Example Request**:
@@ -165,7 +160,8 @@ Authorization: Bearer eyJrIjoiT0tTcG1pUlY2RnVKZTFVaDFsNFZXdE9ZWmNrMkZYbk
 
 {
   "uid": "nErXDvCkzz",
-  "title": "Department ABC"
+  "title": "Department ABC",
+  "parentUid": "fgnj5e52gel76g"
 }
 ```
 
@@ -173,6 +169,7 @@ JSON Body schema:
 
 - **uid** – Optional [unique identifier]({{< ref "#identifier-id-vs-unique-identifier-uid" >}}).
 - **title** – The title of the folder.
+- **parentUid** - Optional field, the unique identifier of the parent folder under which the folder should be created. Requires nested folders to be enabled.
 
 **Example Response**:
 
@@ -240,7 +237,6 @@ Authorization: Bearer eyJrIjoiT0tTcG1pUlY2RnVKZTFVaDFsNFZXdE9ZWmNrMkZYbk
 
 JSON Body schema:
 
-- **uid** – Provide another [unique identifier](/http_api/folder/#identifier-id-vs-unique-identifier-uid) than stored to change the unique identifier. Starting with 10.0, this is **deprecated**. It will be removed in a future release. Please avoid using it because it can result in folder losing its permissions.
 - **title** – The title of the folder.
 - **version** – Provide the current version to be able to update the folder. Not needed if `overwrite=true`.
 - **overwrite** – Set to true if you want to overwrite existing folder with newer version.
@@ -415,14 +411,14 @@ See note in the [introduction]({{< ref "#folder-api" >}}) for an explanation.
 
 If moving the folder under another folder:
 
-| Action          | Scope                                  |
-| --------------- | -------------------------------------- |
-| `folders:write` | `folders:uid:<destination folder UID>` |
+| Action           | Scope                                                 |
+| ---------------- | ----------------------------------------------------- |
+| `folders:create` | `folders:uid:<destination folder UID>`<br>`folders:*` |
 
 If moving the folder under root:
 | Action | Scope |
 | -------------- | ------------- |
-| `folders:create` | `folders:*` |
+| `folders:create` | `folders:uid:general`<br>`folders:*` |
 
 JSON body schema:
 

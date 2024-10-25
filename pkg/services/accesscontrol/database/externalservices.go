@@ -2,9 +2,7 @@ package database
 
 import (
 	"context"
-	// #nosec G505 Used only for generating a 160 bit hash, it's not used for security purposes
-	"crypto/sha1"
-	"encoding/hex"
+
 	"errors"
 	"fmt"
 	"time"
@@ -13,24 +11,16 @@ import (
 	"github.com/grafana/grafana/pkg/services/accesscontrol"
 )
 
-// extServiceRoleUID generates a 160 bit unique ID using SHA-1 that fits within the 40 characters limit of the role UID.
-func extServiceRoleUID(externalServiceID string) string {
-	uid := fmt.Sprintf("%s%s_permissions", accesscontrol.ExternalServiceRoleUIDPrefix, externalServiceID)
-	// #nosec G505 Used only for generating a 160 bit hash, it's not used for security purposes
-	hasher := sha1.New()
-	hasher.Write([]byte(uid))
-
-	return hex.EncodeToString(hasher.Sum(nil))
-}
-
 func extServiceRoleName(externalServiceID string) string {
 	name := fmt.Sprintf("%s%s:permissions", accesscontrol.ExternalServiceRolePrefix, externalServiceID)
 	return name
 }
 
 func (s *AccessControlStore) DeleteExternalServiceRole(ctx context.Context, externalServiceID string) error {
-	uid := extServiceRoleUID(externalServiceID)
+	ctx, span := tracer.Start(ctx, "accesscontrol.database.DeleteExternalServiceRole")
+	defer span.End()
 
+	uid := accesscontrol.PrefixedRoleUID(extServiceRoleName(externalServiceID))
 	return s.sql.WithDbSession(ctx, func(sess *db.Session) error {
 		stored, errGet := getRoleByUID(ctx, sess, uid)
 		if errGet != nil {
@@ -65,6 +55,9 @@ func (s *AccessControlStore) DeleteExternalServiceRole(ctx context.Context, exte
 }
 
 func (s *AccessControlStore) SaveExternalServiceRole(ctx context.Context, cmd accesscontrol.SaveExternalServiceRoleCommand) error {
+	ctx, span := tracer.Start(ctx, "accesscontrol.database.SaveExternalServiceRole")
+	defer span.End()
+
 	role := genExternalServiceRole(cmd)
 	assignment := genExternalServiceAssignment(cmd)
 
@@ -90,11 +83,12 @@ func (s *AccessControlStore) SaveExternalServiceRole(ctx context.Context, cmd ac
 }
 
 func genExternalServiceRole(cmd accesscontrol.SaveExternalServiceRoleCommand) accesscontrol.Role {
+	name := extServiceRoleName(cmd.ExternalServiceID)
 	role := accesscontrol.Role{
-		OrgID:       cmd.OrgID,
+		OrgID:       accesscontrol.GlobalOrgID, // External Service Roles are global
 		Version:     1,
-		Name:        extServiceRoleName(cmd.ExternalServiceID),
-		UID:         extServiceRoleUID(cmd.ExternalServiceID),
+		Name:        name,
+		UID:         accesscontrol.PrefixedRoleUID(name),
 		DisplayName: fmt.Sprintf("External Service %s Permissions", cmd.ExternalServiceID),
 		Description: fmt.Sprintf("External Service %s permissions", cmd.ExternalServiceID),
 		Group:       "External Service",
@@ -102,25 +96,22 @@ func genExternalServiceRole(cmd accesscontrol.SaveExternalServiceRoleCommand) ac
 		Created:     time.Now(),
 		Updated:     time.Now(),
 	}
-	if cmd.Global {
-		role.OrgID = accesscontrol.GlobalOrgID
-	}
 	return role
 }
 
 func genExternalServiceAssignment(cmd accesscontrol.SaveExternalServiceRoleCommand) accesscontrol.UserRole {
 	assignment := accesscontrol.UserRole{
-		OrgID:   cmd.OrgID,
+		OrgID:   cmd.AssignmentOrgID,
 		UserID:  cmd.ServiceAccountID,
 		Created: time.Now(),
-	}
-	if cmd.Global {
-		assignment.OrgID = accesscontrol.GlobalOrgID
 	}
 	return assignment
 }
 
 func getRoleByUID(ctx context.Context, sess *db.Session, uid string) (*accesscontrol.Role, error) {
+	_, span := tracer.Start(ctx, "accesscontrol.database.getRoleByUID")
+	defer span.End()
+
 	var role accesscontrol.Role
 	has, err := sess.Where("uid = ?", uid).Get(&role)
 	if err != nil {
@@ -133,6 +124,9 @@ func getRoleByUID(ctx context.Context, sess *db.Session, uid string) (*accesscon
 }
 
 func getRoleAssignments(ctx context.Context, sess *db.Session, roleID int64) ([]accesscontrol.UserRole, error) {
+	_, span := tracer.Start(ctx, "accesscontrol.database.GgetRoleAssignments")
+	defer span.End()
+
 	var assignements []accesscontrol.UserRole
 	if err := sess.Where("role_id = ?", roleID).Find(&assignements); err != nil {
 		return nil, err
@@ -141,6 +135,9 @@ func getRoleAssignments(ctx context.Context, sess *db.Session, roleID int64) ([]
 }
 
 func getRolePermissions(ctx context.Context, sess *db.Session, id int64) ([]accesscontrol.Permission, error) {
+	_, span := tracer.Start(ctx, "accesscontrol.database.getRolePermissions")
+	defer span.End()
+
 	var permissions []accesscontrol.Permission
 	if err := sess.Where("role_id = ?", id).Find(&permissions); err != nil {
 		return nil, err
@@ -175,6 +172,9 @@ func permissionDiff(previous, new []accesscontrol.Permission) (added, removed []
 }
 
 func (*AccessControlStore) saveRole(ctx context.Context, sess *db.Session, role *accesscontrol.Role) (*accesscontrol.Role, error) {
+	ctx, span := tracer.Start(ctx, "accesscontrol.database.saveRole")
+	defer span.End()
+
 	existingRole, err := getRoleByUID(ctx, sess, role.UID)
 	if err != nil && !errors.Is(err, accesscontrol.ErrRoleNotFound) {
 		return nil, err
@@ -195,6 +195,9 @@ func (*AccessControlStore) saveRole(ctx context.Context, sess *db.Session, role 
 }
 
 func (*AccessControlStore) savePermissions(ctx context.Context, sess *db.Session, roleID int64, permissions []accesscontrol.Permission) error {
+	ctx, span := tracer.Start(ctx, "accesscontrol.database.savePermissions")
+	defer span.End()
+
 	now := time.Now()
 	storedPermissions, err := getRolePermissions(ctx, sess, roleID)
 	if err != nil {
@@ -228,22 +231,29 @@ func (*AccessControlStore) savePermissions(ctx context.Context, sess *db.Session
 }
 
 func (*AccessControlStore) saveUserAssignment(ctx context.Context, sess *db.Session, assignment accesscontrol.UserRole) error {
+	ctx, span := tracer.Start(ctx, "accesscontrol.database.saveUserAssignment")
+	defer span.End()
+
 	// alreadyAssigned checks if the assignment already exists without accounting for the organization
 	assignments, errGetAssigns := getRoleAssignments(ctx, sess, assignment.RoleID)
 	if errGetAssigns != nil {
 		return errGetAssigns
 	}
 
+	// Revoke assignment if it's assigned to another user or service account
+	if len(assignments) > 0 && assignments[0].UserID != assignment.UserID {
+		if _, errDel := sess.Where("role_id = ?", assignment.RoleID).Delete(&accesscontrol.UserRole{}); errDel != nil {
+			return errDel
+		}
+		assignments = nil
+	}
+
+	// If no assignment exists, insert a new one.
 	if len(assignments) == 0 {
 		if _, errInsert := sess.Insert(&assignment); errInsert != nil {
 			return errInsert
 		}
 		return nil
-	}
-
-	// Ensure the role was assigned only to this service account
-	if len(assignments) > 1 || assignments[0].UserID != assignment.UserID {
-		return errors.New("external service role assigned to another user or service account")
 	}
 
 	// Ensure the assignment is in the correct organization

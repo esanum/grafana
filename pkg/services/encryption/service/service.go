@@ -7,7 +7,10 @@ import (
 	"errors"
 	"fmt"
 
+	"go.opentelemetry.io/otel/attribute"
+
 	"github.com/grafana/grafana/pkg/infra/log"
+	"github.com/grafana/grafana/pkg/infra/tracing"
 	"github.com/grafana/grafana/pkg/infra/usagestats"
 	"github.com/grafana/grafana/pkg/services/encryption"
 	"github.com/grafana/grafana/pkg/setting"
@@ -24,7 +27,8 @@ const (
 // Service must not be used for encryption.
 // Use secrets.Service implementing envelope encryption instead.
 type Service struct {
-	log log.Logger
+	tracer tracing.Tracer
+	log    log.Logger
 
 	cfg          *setting.Cfg
 	usageMetrics usagestats.Service
@@ -34,12 +38,14 @@ type Service struct {
 }
 
 func ProvideEncryptionService(
+	tracer tracing.Tracer,
 	provider encryption.Provider,
 	usageMetrics usagestats.Service,
 	cfg *setting.Cfg,
 ) (*Service, error) {
 	s := &Service{
-		log: log.New("encryption"),
+		tracer: tracer,
+		log:    log.New("encryption"),
 
 		ciphers:   provider.ProvideCiphers(),
 		deciphers: provider.ProvideDeciphers(),
@@ -82,17 +88,20 @@ func (s *Service) checkEncryptionAlgorithm(algorithm string) error {
 }
 
 func (s *Service) registerUsageMetrics() {
-	s.usageMetrics.RegisterMetricsFunc(func(context.Context) (map[string]interface{}, error) {
+	s.usageMetrics.RegisterMetricsFunc(func(context.Context) (map[string]any, error) {
 		algorithm := s.cfg.SectionWithEnvOverrides(securitySection).Key(encryptionAlgorithmKey).
 			MustString(defaultEncryptionAlgorithm)
 
-		return map[string]interface{}{
+		return map[string]any{
 			fmt.Sprintf("stats.encryption.%s.count", algorithm): 1,
 		}, nil
 	})
 }
 
 func (s *Service) Decrypt(ctx context.Context, payload []byte, secret string) ([]byte, error) {
+	ctx, span := s.tracer.Start(ctx, "encryption.service.Decrypt")
+	defer span.End()
+
 	var err error
 	defer func() {
 		if err != nil {
@@ -114,6 +123,8 @@ func (s *Service) Decrypt(ctx context.Context, payload []byte, secret string) ([
 		err = fmt.Errorf("no decipher available for algorithm '%s'", algorithm)
 		return nil, err
 	}
+
+	span.SetAttributes(attribute.String("encryption.algorithm", algorithm))
 
 	var decrypted []byte
 	decrypted, err = decipher.Decrypt(ctx, toDecrypt, secret)
@@ -163,6 +174,9 @@ func (s *Service) deriveEncryptionAlgorithm(payload []byte) (string, []byte, err
 }
 
 func (s *Service) Encrypt(ctx context.Context, payload []byte, secret string) ([]byte, error) {
+	ctx, span := s.tracer.Start(ctx, "encryption.service.Encrypt")
+	defer span.End()
+
 	var err error
 	defer func() {
 		if err != nil {
@@ -178,6 +192,8 @@ func (s *Service) Encrypt(ctx context.Context, payload []byte, secret string) ([
 		err = fmt.Errorf("no cipher available for algorithm '%s'", algorithm)
 		return nil, err
 	}
+
+	span.SetAttributes(attribute.String("encryption.algorithm", algorithm))
 
 	var encrypted []byte
 	encrypted, err = cipher.Encrypt(ctx, payload, secret)

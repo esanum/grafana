@@ -1,3 +1,4 @@
+import { IScope } from 'angular';
 import EventEmitter from 'eventemitter3';
 import { Unsubscribable, Observable, Subscriber } from 'rxjs';
 import { filter } from 'rxjs/operators';
@@ -48,14 +49,14 @@ export class EventBusSrv implements EventBus, LegacyEmitter {
     });
   }
 
-  newScopedBus(key: string, filter?: EventFilterOptions): EventBus {
+  newScopedBus(key: string, filter?: EventFilterOptions): ScopedEventBus {
     return new ScopedEventBus([key], this, filter);
   }
 
   /**
    * Legacy functions
    */
-  emit<T>(event: AppEvent<T> | string, payload?: T | any): void {
+  emit<T>(event: AppEvent<T> | string, payload?: T): void {
     // console.log(`Deprecated emitter function used (emit), use $emit`);
 
     if (typeof event === 'string') {
@@ -65,7 +66,7 @@ export class EventBusSrv implements EventBus, LegacyEmitter {
     }
   }
 
-  on<T>(event: AppEvent<T> | string, handler: LegacyEventHandler<T>, scope?: any) {
+  on<T>(event: AppEvent<T> | string, handler: LegacyEventHandler<T>, scope?: IScope) {
     // console.log(`Deprecated emitter function used (on), use $on`);
 
     // need this wrapper to make old events compatible with old handlers
@@ -123,20 +124,20 @@ class ScopedEventBus implements EventBus {
 
   publish<T extends BusEvent>(event: T): void {
     if (!event.origin) {
-      (event as any).origin = this;
+      event.origin = this;
     }
     this.eventBus.publish(event);
   }
 
-  filter = (event: BusEvent) => {
+  filter<T extends BusEvent>(event: T) {
     if (this.filterConfig.onlyLocal) {
       return event.origin === this;
     }
     return true;
-  };
+  }
 
   getStream<T extends BusEvent>(eventType: BusEventType<T>): Observable<T> {
-    return this.eventBus.getStream(eventType).pipe(filter(this.filter)) as Observable<T>;
+    return this.eventBus.getStream(eventType).pipe(filter(this.filter.bind(this)));
   }
 
   // syntax sugar

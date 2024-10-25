@@ -1,22 +1,13 @@
-import { render, screen, within } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import React from 'react';
-import { Provider } from 'react-redux';
-import { Router } from 'react-router-dom';
-import { getGrafanaContextMock } from 'test/mocks/getGrafanaContextMock';
+import { render } from 'test/test-utils';
 
-import { selectors } from '@grafana/e2e-selectors';
-import { locationService } from '@grafana/runtime';
-import { GrafanaContext } from 'app/core/context/GrafanaContext';
-
-import { configureStore } from '../../../../store/configureStore';
 import { DashboardModel } from '../../state';
 import { createDashboardModelFixture } from '../../state/__fixtures__/dashboardFixtures';
 
 import { DashboardSettings } from './DashboardSettings';
 
 function setup(dashboard: DashboardModel) {
-  const store = configureStore();
   const sectionNav = {
     main: { text: 'Dashboard' },
     node: {
@@ -26,13 +17,7 @@ function setup(dashboard: DashboardModel) {
 
   // Need to use DashboardSettings here as it's responsible for fetching the state back from location
   return render(
-    <GrafanaContext.Provider value={getGrafanaContextMock()}>
-      <Provider store={store}>
-        <Router history={locationService.getHistory()}>
-          <DashboardSettings editview="links" dashboard={dashboard} sectionNav={sectionNav} pageNav={sectionNav.node} />
-        </Router>
-      </Provider>
-    </GrafanaContext.Provider>
+    <DashboardSettings editview="links" dashboard={dashboard} sectionNav={sectionNav} pageNav={sectionNav.node} />
   );
 }
 
@@ -90,10 +75,10 @@ describe('LinksSettings', () => {
     const linklessDashboard = createDashboardModelFixture({ links: [] });
     setup(linklessDashboard);
 
-    expect(screen.getByRole('heading', { name: 'Links' })).toBeInTheDocument();
-    expect(
-      screen.getByTestId(selectors.components.CallToActionCard.buttonV2('Add dashboard link'))
-    ).toBeInTheDocument();
+    const linksTab = screen.getByRole('tab', { name: 'Links' });
+    expect(linksTab).toBeInTheDocument();
+    expect(linksTab).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('button', { name: 'Add dashboard link' })).toBeInTheDocument();
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
   });
 
@@ -102,9 +87,7 @@ describe('LinksSettings', () => {
     setup(dashboard);
 
     expect(getTableBodyRows().length).toBe(dashboard.links.length);
-    expect(
-      screen.queryByTestId(selectors.components.CallToActionCard.buttonV2('Add dashboard link'))
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add dashboard link' })).not.toBeInTheDocument();
   });
 
   test('it rearranges the order of dashboard links', async () => {
@@ -125,14 +108,14 @@ describe('LinksSettings', () => {
     // Checking the original order
     assertRowHasText(0, links[0].title);
     assertRowHasText(1, links[1].title);
-    assertRowHasText(2, links[2].url);
+    assertRowHasText(2, links[2].url!);
 
     await userEvent.click(within(getTableBody()).getAllByRole('button', { name: 'Move link down' })[0]);
     await userEvent.click(within(getTableBody()).getAllByRole('button', { name: 'Move link down' })[1]);
     await userEvent.click(within(getTableBody()).getAllByRole('button', { name: 'Move link up' })[0]);
 
     // Checking if it has changed the sorting accordingly
-    assertRowHasText(0, links[2].url);
+    assertRowHasText(0, links[2].url!);
     assertRowHasText(1, links[1].title);
     assertRowHasText(2, links[0].title);
   });
@@ -173,7 +156,7 @@ describe('LinksSettings', () => {
     expect(screen.queryByText('Type')).toBeInTheDocument();
     expect(screen.queryByText('Title')).toBeInTheDocument();
     expect(screen.queryByText('With tags')).toBeInTheDocument();
-    expect(screen.queryByText('Apply')).toBeInTheDocument();
+    expect(screen.queryByText('Back to list')).toBeInTheDocument();
 
     expect(screen.queryByText('Url')).not.toBeInTheDocument();
     expect(screen.queryByText('Tooltip')).not.toBeInTheDocument();
@@ -192,7 +175,7 @@ describe('LinksSettings', () => {
     await userEvent.clear(screen.getByRole('textbox', { name: /title/i }));
     await userEvent.type(screen.getByRole('textbox', { name: /title/i }), 'New Dashboard Link');
 
-    await userEvent.click(screen.getByRole('button', { name: /Apply/i }));
+    await userEvent.click(screen.getByRole('button', { name: /Back to list/i }));
 
     expect(getTableBodyRows().length).toBe(4);
     expect(within(getTableBody()).queryByText('New Dashboard Link')).toBeInTheDocument();
@@ -201,7 +184,7 @@ describe('LinksSettings', () => {
     await userEvent.clear(screen.getByRole('textbox', { name: /title/i }));
     await userEvent.type(screen.getByRole('textbox', { name: /title/i }), 'The first dashboard link');
 
-    await userEvent.click(screen.getByRole('button', { name: /Apply/i }));
+    await userEvent.click(screen.getByRole('button', { name: /Back to list/i }));
 
     expect(within(getTableBody()).queryByText(originalLinks[0].title)).not.toBeInTheDocument();
     expect(within(getTableBody()).queryByText('The first dashboard link')).toBeInTheDocument();

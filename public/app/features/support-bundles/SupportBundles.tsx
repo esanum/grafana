@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { connect, ConnectedProps } from 'react-redux';
 
 import { dateTimeFormat } from '@grafana/data';
@@ -52,11 +52,8 @@ const SupportBundlesUnconnected = ({ supportBundles, isLoading, loadBundles, rem
     }
   });
 
-  const hasAccess = contextSrv.hasAccess(AccessControlAction.ActionSupportBundlesCreate, contextSrv.isGrafanaAdmin);
-  const hasDeleteAccess = contextSrv.hasAccess(
-    AccessControlAction.ActionSupportBundlesDelete,
-    contextSrv.isGrafanaAdmin
-  );
+  const hasAccess = contextSrv.hasPermission(AccessControlAction.ActionSupportBundlesCreate);
+  const hasDeleteAccess = contextSrv.hasPermission(AccessControlAction.ActionSupportBundlesDelete);
 
   const actions = hasAccess ? NewBundleButton : undefined;
 

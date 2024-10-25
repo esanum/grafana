@@ -1,8 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import React from 'react';
 
-import { createDefaultConfigOptions } from '../mocks';
+import { createDefaultConfigOptions } from '../__mocks__/datasource';
 
 import { AlertingSettings } from './AlertingSettings';
 
@@ -17,7 +16,7 @@ describe('AlertingSettings', () => {
   it('should update alerting settings', async () => {
     const onChange = jest.fn();
     render(<AlertingSettings options={options} onOptionsChange={onChange} />);
-    await userEvent.click(screen.getByLabelText('Toggle switch'));
+    await userEvent.click(screen.getByRole('switch'));
     expect(onChange).toHaveBeenCalledTimes(1);
   });
 });

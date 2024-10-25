@@ -22,7 +22,7 @@ export function getLayerEditor(opts: InstanceState): NestedPanelOptions<LayerEdi
   const { selected, scene } = opts;
 
   if (!scene.currentLayer) {
-    scene.currentLayer = scene.root as FrameState;
+    scene.currentLayer = scene.root;
   }
 
   if (selected) {
@@ -47,10 +47,10 @@ export function getLayerEditor(opts: InstanceState): NestedPanelOptions<LayerEdi
 
     // Note that canvas editor writes things to the scene!
     values: (parent: NestedValueAccess) => ({
-      getValue: (path: string) => {
+      getValue: (path) => {
         return lodashGet(options, path);
       },
-      onChange: (path: string, value: any) => {
+      onChange: (path, value) => {
         if (path === 'type' && value) {
           console.warn('unable to change layer type');
           return;
@@ -77,7 +77,9 @@ export function getLayerEditor(opts: InstanceState): NestedPanelOptions<LayerEdi
       });
 
       const ctx = { ...context, options };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/consistent-type-assertions
       optionBuilder.addBackground(builder as any, ctx);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/consistent-type-assertions
       optionBuilder.addBorder(builder as any, ctx);
 
       if (currentLayer && !currentLayer.isRoot()) {

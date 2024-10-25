@@ -1,5 +1,5 @@
 import { capitalize } from 'lodash';
-import { map, Observable, defer, mergeMap } from 'rxjs';
+import { map, Observable, takeWhile } from 'rxjs';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
@@ -17,10 +17,11 @@ import {
 import { getGrafanaLiveSrv } from '@grafana/runtime';
 
 import { SearchStreamingState } from './dataquery.gen';
-import { TempoDatasource } from './datasource';
-import { createTableFrameFromTraceQlQuery } from './resultTransformer';
+import { DEFAULT_SPSS, TempoDatasource } from './datasource';
+import { formatTraceQLResponse } from './resultTransformer';
 import { SearchMetrics, TempoJsonData, TempoQuery } from './types';
-export async function getLiveStreamKey(): Promise<string> {
+
+function getLiveStreamKey(): string {
   return uuidv4();
 }
 
@@ -34,58 +35,69 @@ export function doTempoChannelStream(
 
   let frames: DataFrame[] | undefined = undefined;
   let state: LoadingState = LoadingState.NotStarted;
+  const requestTime = performance.now();
 
-  return defer(() => getLiveStreamKey()).pipe(
-    mergeMap((key) => {
-      const requestTime = performance.now();
-      return getGrafanaLiveSrv()
-        .getStream<MutableDataFrame>({
-          scope: LiveChannelScope.DataSource,
-          namespace: ds.uid,
-          path: `search/${key}`,
-          data: {
-            ...query,
-            timeRange: {
-              from: range.from.toISOString(),
-              to: range.to.toISOString(),
-            },
-          },
-        })
-        .pipe(
-          map((evt) => {
-            if ('message' in evt && evt?.message) {
-              const currentTime = performance.now();
-              const elapsedTime = currentTime - requestTime;
-              // Schema should be [traces, metrics, state, error]
-              const traces = evt.message.data.values[0][0];
-              const metrics = evt.message.data.values[1][0];
-              const frameState: SearchStreamingState = evt.message.data.values[2][0];
-              const error = evt.message.data.values[3][0];
-
-              switch (frameState) {
-                case SearchStreamingState.Done:
-                  state = LoadingState.Done;
-                  break;
-                case SearchStreamingState.Streaming:
-                  state = LoadingState.Streaming;
-                  break;
-                case SearchStreamingState.Error:
-                  throw new Error(error);
-              }
-
-              frames = [
-                metricsDataFrame(metrics, frameState, elapsedTime),
-                ...createTableFrameFromTraceQlQuery(traces, instanceSettings),
-              ];
-            }
-            return {
-              data: frames || [],
-              state,
-            };
-          })
-        );
+  return getGrafanaLiveSrv()
+    .getStream<MutableDataFrame>({
+      scope: LiveChannelScope.DataSource,
+      namespace: ds.uid,
+      path: `search/${getLiveStreamKey()}`,
+      data: {
+        ...query,
+        SpansPerSpanSet: query.spss ?? DEFAULT_SPSS,
+        timeRange: {
+          from: range.from.toISOString(),
+          to: range.to.toISOString(),
+        },
+      },
     })
-  );
+    .pipe(
+      takeWhile((evt) => {
+        if ('message' in evt && evt?.message) {
+          const frameState: SearchStreamingState = evt.message.data.values[2][0];
+          if (frameState === SearchStreamingState.Done || frameState === SearchStreamingState.Error) {
+            return false;
+          }
+        }
+        return true;
+      }, true)
+    )
+    .pipe(
+      map((evt) => {
+        if ('message' in evt && evt?.message) {
+          const currentTime = performance.now();
+          const elapsedTime = currentTime - requestTime;
+          // Schema should be [traces, metrics, state, error]
+          const traces = evt.message.data.values[0][0];
+          const metrics = evt.message.data.values[1][0];
+          const frameState: SearchStreamingState = evt.message.data.values[2][0];
+          const error = evt.message.data.values[3][0];
+
+          switch (frameState) {
+            case SearchStreamingState.Done:
+              state = LoadingState.Done;
+              break;
+            case SearchStreamingState.Streaming:
+              state = LoadingState.Streaming;
+              break;
+            case SearchStreamingState.Error:
+              throw new Error(error);
+          }
+
+          // The order of the frames is important. The metrics frame should always be the last frame.
+          // This is because the metrics frame is used to display the progress of the streaming query
+          // and we would like to display the results first.
+          frames = [
+            ...formatTraceQLResponse(traces, instanceSettings, query.tableType),
+            metricsDataFrame(metrics, frameState, elapsedTime),
+          ];
+        }
+        return {
+          data: frames || [],
+          state,
+        };
+      })
+    );
 }
 
 function metricsDataFrame(metrics: SearchMetrics, state: SearchStreamingState, elapsedTime: number) {

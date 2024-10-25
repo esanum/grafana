@@ -22,26 +22,26 @@ type FutureAuthService interface {
 var _ FutureAuthService = (*simpleAuthService)(nil)
 
 type simpleAuthService struct {
-	sql           db.DB
-	ac            accesscontrol.Service
-	folderService folder.Service
-	logger        log.Logger
+	sql         db.DB
+	ac          accesscontrol.Service
+	folderStore folder.Store
+	logger      log.Logger
 }
 
 func (a *simpleAuthService) GetDashboardReadFilter(ctx context.Context, orgID int64, user *user.SignedInUser) (ResourceFilter, error) {
 	canReadDashboard, canReadFolder := accesscontrol.Checker(user, dashboards.ActionDashboardsRead), accesscontrol.Checker(user, dashboards.ActionFoldersRead)
 	return func(kind entityKind, uid, parent string) bool {
 		if kind == entityKindFolder {
-			scopes, err := dashboards.GetInheritedScopes(ctx, orgID, uid, a.folderService)
+			scopes, err := dashboards.GetInheritedScopes(ctx, orgID, uid, a.folderStore)
 			if err != nil {
-				a.logger.Debug("could not retrieve inherited folder scopes:", "err", err)
+				a.logger.Debug("Could not retrieve inherited folder scopes:", "err", err)
 			}
 			scopes = append(scopes, dashboards.ScopeFoldersProvider.GetResourceScopeUID(uid))
 			return canReadFolder(scopes...)
 		} else if kind == entityKindDashboard {
-			scopes, err := dashboards.GetInheritedScopes(ctx, orgID, parent, a.folderService)
+			scopes, err := dashboards.GetInheritedScopes(ctx, orgID, parent, a.folderStore)
 			if err != nil {
-				a.logger.Debug("could not retrieve inherited folder scopes:", "err", err)
+				a.logger.Debug("Could not retrieve inherited folder scopes:", "err", err)
 			}
 			scopes = append(scopes, dashboards.ScopeDashboardsProvider.GetResourceScopeUID(uid))
 			scopes = append(scopes, dashboards.ScopeFoldersProvider.GetResourceScopeUID(parent))

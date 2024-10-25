@@ -1,6 +1,6 @@
 import { css } from '@emotion/css';
 import { once } from 'lodash';
-import React, { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { DataSourceInstanceSettings, DataSourceRef, GrafanaTheme2 } from '@grafana/data';
 import { config, reportInteraction } from '@grafana/runtime';
@@ -14,6 +14,7 @@ import {
   Input,
   Icon,
 } from '@grafana/ui';
+import { t, Trans } from 'app/core/internationalization';
 import * as DFImport from 'app/features/dataframe-import';
 import { GrafanaQuery } from 'app/plugins/datasource/grafana/types';
 import { getFileDropToQueryHandler } from 'app/plugins/datasource/grafana/utils';
@@ -92,7 +93,7 @@ export function DataSourceModal({
     });
   };
   // Memoizing to keep once() cached so it avoids reporting multiple times
-  const reportSearchUsageOnce = React.useMemo(
+  const reportSearchUsageOnce = useMemo(
     () =>
       once(() => {
         reportInteraction(INTERACTION_EVENT_NAME, { item: 'search', src: analyticsInteractionSrc });
@@ -143,7 +144,7 @@ export function DataSourceModal({
 
   return (
     <Modal
-      title="Select data source"
+      title={t('data-source-picker.modal.title', 'Select data source')}
       closeOnEscape={true}
       closeOnBackdropClick={true}
       isOpen={true}
@@ -159,7 +160,7 @@ export function DataSourceModal({
           className={styles.searchInput}
           value={search}
           prefix={<Icon name="search" />}
-          placeholder="Search data source"
+          placeholder={t('data-source-picker.modal.input-placeholder', 'Select data source')}
           onChange={(e) => {
             setSearch(e.currentTarget.value);
             reportSearchUsageOnce();
@@ -211,7 +212,11 @@ export function DataSourceModal({
           )}
         </div>
         <div className={styles.newDSSection}>
-          <span className={styles.newDSDescription}>Open a new tab and configure a data source</span>
+          <span className={styles.newDSDescription}>
+            <Trans i18nKey="data-source-picker.modal.configure-new-data-source">
+              Open a new tab and configure a data source
+            </Trans>
+          </span>
           <AddNewDataSourceButton
             variant="secondary"
             onClick={() => {
@@ -230,95 +235,95 @@ export function DataSourceModal({
 
 function getDataSourceModalStyles(theme: GrafanaTheme2) {
   return {
-    modal: css`
-      width: 80%;
-      height: 80%;
-      max-width: 1200px;
-      max-height: 900px;
+    modal: css({
+      width: '80%',
+      height: '80%',
+      maxWidth: '1200px',
+      maxHeight: '900px',
 
-      ${theme.breakpoints.down('md')} {
-        width: 100%;
-      }
-    `,
-    modalContent: css`
-      display: flex;
-      flex-direction: row;
-      height: 100%;
+      [theme.breakpoints.down('md')]: {
+        width: '100%',
+      },
+    }),
+    modalContent: css({
+      display: 'flex',
+      flexDirection: 'row',
+      height: '100%',
 
-      ${theme.breakpoints.down('md')} {
-        flex-direction: column;
-      }
-    `,
-    leftColumn: css`
-      display: flex;
-      flex-direction: column;
-      width: 50%;
-      height: 100%;
-      padding-right: ${theme.spacing(4)};
-      border-right: 1px solid ${theme.colors.border.weak};
+      [theme.breakpoints.down('md')]: {
+        flexDirection: 'column',
+      },
+    }),
+    leftColumn: css({
+      display: 'flex',
+      flexDirection: 'column',
+      width: '50%',
+      height: '100%',
+      paddingRight: theme.spacing(4),
+      borderRight: `1px solid ${theme.colors.border.weak}`,
 
-      ${theme.breakpoints.down('md')} {
-        width: 100%;
-        border-right: 0;
-        padding-right: 0;
-        flex: 1;
-        overflow-y: auto;
-      }
-    `,
-    rightColumn: css`
-      display: flex;
-      flex-direction: column;
-      width: 50%;
-      height: 100%;
-      justify-items: space-evenly;
-      align-items: stretch;
-      padding-left: ${theme.spacing(4)};
+      [theme.breakpoints.down('md')]: {
+        width: '100%',
+        borderRight: 0,
+        paddingRight: 0,
+        flex: 1,
+        overflowY: 'auto',
+      },
+    }),
+    rightColumn: css({
+      display: 'flex',
+      flexDirection: 'column',
+      width: '50%',
+      height: '100%',
+      justifyItems: 'space-evenly',
+      alignItems: 'stretch',
+      paddingLeft: theme.spacing(4),
 
-      ${theme.breakpoints.down('md')} {
-        width: 100%;
-        padding-left: 0;
-        flex: 0;
-      }
-    `,
-    builtInDataSources: css`
-      flex: 1 1;
-      margin-bottom: ${theme.spacing(4)};
+      [theme.breakpoints.down('md')]: {
+        width: '100%',
+        paddingLeft: 0,
+        flex: 0,
+      },
+    }),
+    builtInDataSources: css({
+      flex: '1 1',
+      marginBottom: theme.spacing(4),
 
-      ${theme.breakpoints.down('md')} {
-        flex: 0;
-      }
-    `,
-    builtInDataSourcesList: css`
-      ${theme.breakpoints.down('md')} {
-        display: none;
-        margin-bottom: 0;
-      }
+      [theme.breakpoints.down('md')]: {
+        flex: 0,
+      },
+    }),
+    builtInDataSourcesList: css({
+      [theme.breakpoints.down('md')]: {
+        display: 'none',
+        marginBottom: 0,
+      },
 
-      margin-bottom: ${theme.spacing(4)};
-    `,
-    appendBuiltInDataSourcesList: css`
-      ${theme.breakpoints.up('md')} {
-        display: none;
-      }
-    `,
-    newDSSection: css`
-      display: flex;
-      flex-direction: row;
-      width: 100%;
-      justify-content: space-between;
-      align-items: center;
-    `,
-    newDSDescription: css`
-      flex: 1 0;
-      text-overflow: ellipsis;
-      overflow: hidden;
-      white-space: nowrap;
-      color: ${theme.colors.text.secondary};
-    `,
-    searchInput: css`
-      width: 100%;
-      min-height: 32px;
-      margin-bottom: ${theme.spacing(1)};
-    `,
+      marginBottom: theme.spacing(4),
+    }),
+    appendBuiltInDataSourcesList: css({
+      [theme.breakpoints.up('md')]: {
+        display: 'none',
+      },
+    }),
+    newDSSection: css({
+      display: 'flex',
+      flexDirection: 'row',
+      width: '100%',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+    }),
+    newDSDescription: css({
+      flex: '1 0',
+      textOverflow: 'ellipsis',
+      overflow: 'hidden',
+      whiteSpace: 'nowrap',
+      color: theme.colors.text.secondary,
+    }),
+    searchInput: css({
+      width: '100%',
+      minHeight: '32px',
+      marginBottom: theme.spacing(1),
+    }),
   };
 }

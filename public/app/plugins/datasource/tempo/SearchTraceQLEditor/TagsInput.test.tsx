@@ -1,12 +1,10 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import React from 'react';
-
-import { FetchError } from '@grafana/runtime';
 
 import { TraceqlFilter, TraceqlSearchScope } from '../dataquery.gen';
 import { TempoDatasource } from '../datasource';
 import TempoLanguageProvider from '../language_provider';
+import { initTemplateSrv } from '../test/test_utils';
 import { Scope } from '../types';
 
 import TagsInput from './TagsInput';
@@ -16,6 +14,14 @@ describe('TagsInput', () => {
   let user: ReturnType<typeof userEvent.setup>;
 
   beforeEach(() => {
+    const expectedValues = {
+      interpolationVar: 'interpolationText',
+      interpolationText: 'interpolationText',
+      interpolationVarWithPipe: 'interpolationTextOne|interpolationTextTwo',
+      scopedInterpolationText: 'scopedInterpolationText',
+    };
+    initTemplateSrv([{ name: 'templateVariable1' }, { name: 'templateVariable2' }], expectedValues);
+
     jest.useFakeTimers();
     // Need to use delay: null here to work with fakeTimers
     // see https://github.com/testing-library/user-event/issues/833
@@ -33,9 +39,10 @@ describe('TagsInput', () => {
       const tag = screen.getByText('Select tag');
       expect(tag).toBeInTheDocument();
       await user.click(tag);
-      jest.advanceTimersByTime(1000);
+      await act(async () => {
+        jest.advanceTimersByTime(1000);
+      });
       await waitFor(() => {
-        expect(screen.getByText('foo')).toBeInTheDocument();
         expect(screen.getByText('bar')).toBeInTheDocument();
       });
     });
@@ -46,10 +53,13 @@ describe('TagsInput', () => {
       const tag = screen.getByText('Select tag');
       expect(tag).toBeInTheDocument();
       await user.click(tag);
-      jest.advanceTimersByTime(1000);
+      await act(async () => {
+        jest.advanceTimersByTime(1000);
+      });
       await waitFor(() => {
         expect(screen.getByText('cluster')).toBeInTheDocument();
         expect(screen.getByText('container')).toBeInTheDocument();
+        expect(screen.getByText('$templateVariable1')).toBeInTheDocument();
       });
     });
 
@@ -59,9 +69,13 @@ describe('TagsInput', () => {
       const tag = screen.getByText('Select tag');
       expect(tag).toBeInTheDocument();
       await user.click(tag);
-      jest.advanceTimersByTime(1000);
+      await act(async () => {
+        jest.advanceTimersByTime(1000);
+      });
       await waitFor(() => {
         expect(screen.getByText('db')).toBeInTheDocument();
+        expect(screen.getByText('$templateVariable1')).toBeInTheDocument();
+        expect(screen.getByText('$templateVariable2')).toBeInTheDocument();
       });
     });
 
@@ -71,7 +85,9 @@ describe('TagsInput', () => {
       const tag = screen.getByText('Select tag');
       expect(tag).toBeInTheDocument();
       await user.click(tag);
-      jest.advanceTimersByTime(1000);
+      await act(async () => {
+        jest.advanceTimersByTime(1000);
+      });
       await waitFor(() => {
         expect(screen.getByText('cluster')).toBeInTheDocument();
         expect(screen.getByText('container')).toBeInTheDocument();
@@ -107,11 +123,11 @@ describe('TagsInput', () => {
         updateFilter={jest.fn}
         deleteFilter={jest.fn}
         filters={[filter]}
-        setError={function (error: FetchError): void {
-          throw error;
-        }}
+        setError={() => {}}
         staticTags={[]}
         isTagsLoading={false}
+        query={''}
+        addVariablesToOptions={true}
       />
     );
   };

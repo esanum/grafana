@@ -8,16 +8,16 @@ import (
 	jsoniter "github.com/json-iterator/go"
 )
 
-func logf(format string, a ...interface{}) {
+func logf(format string, a ...any) {
 	//fmt.Printf(format, a...)
 }
 
 type templateVariable struct {
 	current struct {
-		value interface{}
+		value any
 	}
 	name         string
-	query        interface{}
+	query        any
 	variableType string
 }
 
@@ -69,7 +69,7 @@ func (d *datasourceVariableLookup) add(templateVariable templateVariable) {
 		return
 	}
 
-	if values, multiValueVariable := templateVariable.current.value.([]interface{}); multiValueVariable {
+	if values, multiValueVariable := templateVariable.current.value.([]any); multiValueVariable {
 		for _, value := range values {
 			if valueAsString, ok := value.(string); ok {
 				refs = append(refs, d.getDsRefsByTemplateVariableValue(valueAsString, datasourceType)...)
@@ -179,7 +179,7 @@ func readDashboard(stream io.Reader, lookup DatasourceLookup) (*dashboardInfo, e
 			}
 
 		case "time":
-			obj, ok := iter.Read().(map[string]interface{})
+			obj, ok := iter.Read().(map[string]any)
 			if ok {
 				if timeFrom, ok := obj["from"].(string); ok {
 					dash.TimeFrom = timeFrom
@@ -396,9 +396,13 @@ func readpanelInfo(iter *jsoniter.Iterator, lookup DatasourceLookup) panelInfo {
 			panel.PluginVersion = iter.ReadString() // since 7x (the saved version for the plugin model)
 
 		case "libraryPanel":
-			var v map[string]string
+			var v map[string]interface{}
 			iter.ReadVal(&v)
-			panel.LibraryPanel = v["uid"]
+			if uid, ok := v["uid"]; ok {
+				if u, isString := uid.(string); isString {
+					panel.LibraryPanel = u
+				}
+			}
 
 		case "datasource":
 			targets.addDatasource(iter)

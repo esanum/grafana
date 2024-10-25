@@ -5,14 +5,13 @@ import {
   DataFrame,
   DataTransformerID,
   dateTimeFormat,
-  dateTimeFormatISO,
   LogsModel,
   MutableDataFrame,
   toCSV,
 } from '@grafana/data';
+import { transformToOTLP } from '@grafana-plugins/tempo/resultTransformer';
 
 import { transformToJaeger } from '../../../plugins/datasource/jaeger/responseTransform';
-import { transformToOTLP } from '../../../plugins/datasource/tempo/resultTransformer';
 import { transformToZipkin } from '../../../plugins/datasource/zipkin/utils/transforms';
 
 /**
@@ -31,7 +30,7 @@ export function downloadLogsModelAsTxt(logsModel: Pick<LogsModel, 'meta' | 'rows
   textToDownload = textToDownload + '\n\n';
 
   logsModel.rows.forEach((row) => {
-    const newRow = dateTimeFormatISO(row.timeEpochMs) + '\t' + row.entry + '\n';
+    const newRow = row.timeEpochMs + '\t' + row.entry + '\n';
     textToDownload = textToDownload + newRow;
   });
 
@@ -58,8 +57,9 @@ export function downloadDataFrameAsCsv(
   transformId: DataTransformerID = DataTransformerID.noop
 ) {
   const dataFrameCsv = toCSV([dataFrame], csvConfig);
+  const bomChar = csvConfig?.useExcelHeader ? String.fromCharCode(0xfeff) : '';
 
-  const blob = new Blob([String.fromCharCode(0xfeff), dataFrameCsv], {
+  const blob = new Blob([bomChar, dataFrameCsv], {
     type: 'text/csv;charset=utf-8',
   });
 

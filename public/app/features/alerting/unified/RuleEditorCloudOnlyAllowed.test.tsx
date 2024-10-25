@@ -1,20 +1,19 @@
-import { screen, waitForElementToBeRemoved } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import React from 'react';
 import { renderRuleEditor, ui } from 'test/helpers/alertingRuleEditor';
-import { byRole, byText } from 'testing-library-selector';
+import { screen, waitForElementToBeRemoved } from 'test/test-utils';
+import { byText } from 'testing-library-selector';
 
 import { setDataSourceSrv } from '@grafana/runtime';
 import { contextSrv } from 'app/core/services/context_srv';
+import { AccessControlAction } from 'app/types';
 import { PromApiFeatures, PromApplication } from 'app/types/unified-alerting-dto';
 
 import { searchFolders } from '../../manage-dashboards/state/actions';
 
 import { discoverFeatures } from './api/buildInfo';
-import { fetchRulerRules, fetchRulerRulesGroup, fetchRulerRulesNamespace, setRulerRuleGroup } from './api/ruler';
+import { fetchRulerRules, fetchRulerRulesGroup, fetchRulerRulesNamespace } from './api/ruler';
 import { ExpressionEditorProps } from './components/rule-editor/ExpressionEditor';
-import { disableRBAC, mockDataSource, MockDataSourceSrv } from './mocks';
-import { fetchRulerRulesIfNotFetchedYet } from './state/actions';
+import { setupMswServer } from './mockApi';
+import { grantUserPermissions, mockDataSource, MockDataSourceSrv } from './mocks';
 import * as config from './utils/config';
 import { DataSourceType } from './utils/datasource';
 
@@ -26,7 +25,12 @@ jest.mock('./components/rule-editor/ExpressionEditor', () => ({
 }));
 
 jest.mock('./api/buildInfo');
-jest.mock('./api/ruler');
+jest.mock('./api/ruler', () => ({
+  rulerUrlBuilder: jest.requireActual('./api/ruler').rulerUrlBuilder,
+  fetchRulerRules: jest.fn(),
+  fetchRulerRulesGroup: jest.fn(),
+  fetchRulerRulesNamespace: jest.fn(),
+}));
 jest.mock('../../../../app/features/manage-dashboards/state/actions');
 
 // there's no angular scope in test and things go terribly wrong when trying to render the query editor row.
@@ -68,6 +72,7 @@ const dataSources = {
     {
       type: DataSourceType.Prometheus,
       name: 'cortex with ruler',
+      isDefault: true,
     },
     { alerting: true }
   ),
@@ -102,6 +107,7 @@ jest.mock('@grafana/runtime', () => ({
   getDataSourceSrv: jest.fn(() => ({
     getInstanceSettings: () => dataSources.prom,
     get: () => dataSources.prom,
+    getList: () => Object.values(dataSources),
   })),
 }));
 
@@ -113,10 +119,8 @@ const mocks = {
   api: {
     discoverFeatures: jest.mocked(discoverFeatures),
     fetchRulerRulesGroup: jest.mocked(fetchRulerRulesGroup),
-    setRulerRuleGroup: jest.mocked(setRulerRuleGroup),
     fetchRulerRulesNamespace: jest.mocked(fetchRulerRulesNamespace),
     fetchRulerRules: jest.mocked(fetchRulerRules),
-    fetchRulerRulesIfNotFetchedYet: jest.mocked(fetchRulerRulesIfNotFetchedYet),
   },
 };
 
@@ -133,14 +137,16 @@ function getDiscoverFeaturesMock(application: PromApplication, features?: Partia
   };
 }
 
+setupMswServer();
+
 describe('RuleEditor cloud: checking editable data sources', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     contextSrv.isEditor = true;
     contextSrv.hasEditPermissionInFolders = true;
+    // grant all permissions in AccessControlActionEnum
+    grantUserPermissions(Object.values(AccessControlAction));
   });
-
-  disableRBAC();
 
   it('for cloud alerts, should only allow to select editable rules sources', async () => {
     mocks.api.discoverFeatures.mockImplementation(async (dataSourceName) => {
@@ -180,28 +186,25 @@ describe('RuleEditor cloud: checking editable data sources', () => {
     mocks.searchFolders.mockResolvedValue([]);
 
     // render rule editor, select mimir/loki managed alerts
-    renderRuleEditor();
-    await waitForElementToBeRemoved(screen.getAllByTestId('Spinner'));
+    const { user } = renderRuleEditor();
+    await waitForElementToBeRemoved(screen.queryAllByTestId('Spinner'));
 
     await ui.inputs.name.find();
 
-    const removeExpressionsButtons = screen.getAllByLabelText('Remove expression');
-    expect(removeExpressionsButtons).toHaveLength(2);
-
-    const switchToCloudButton = screen.getByText('Switch to data source-managed alert rule');
+    const switchToCloudButton = screen.getByText('Data source-managed');
     expect(switchToCloudButton).toBeInTheDocument();
 
-    await userEvent.click(switchToCloudButton);
+    await user.click(switchToCloudButton);
 
     //expressions are removed after switching to data-source managed
     expect(screen.queryAllByLabelText('Remove expression')).toHaveLength(0);
 
     // check that only rules sources that have ruler available are there
     const dataSourceSelect = ui.inputs.dataSource.get();
-    await userEvent.click(byRole('combobox').get(dataSourceSelect));
+    await user.click(dataSourceSelect);
 
-    expect(await byText('loki with ruler').query()).toBeInTheDocument();
     expect(byText('cortex with ruler').query()).toBeInTheDocument();
+    expect(byText('loki with ruler').query()).toBeInTheDocument();
     expect(byText('loki with local rule store').query()).not.toBeInTheDocument();
     expect(byText('prom without ruler api').query()).not.toBeInTheDocument();
     expect(byText('splunk').query()).not.toBeInTheDocument();

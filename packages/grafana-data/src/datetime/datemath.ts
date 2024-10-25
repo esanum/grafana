@@ -1,8 +1,16 @@
 import { includes, isDate } from 'lodash';
 
-import { TimeZone } from '../types/index';
+import { TimeZone } from '../types/time';
 
-import { DateTime, dateTime, dateTimeForTimeZone, DurationUnit, isDateTime, ISO_8601 } from './moment_wrapper';
+import {
+  DateTime,
+  dateTime,
+  dateTimeAsMoment,
+  dateTimeForTimeZone,
+  DurationUnit,
+  isDateTime,
+  ISO_8601,
+} from './moment_wrapper';
 
 const units: DurationUnit[] = ['y', 'M', 'w', 'd', 'h', 'm', 's', 'Q'];
 
@@ -43,16 +51,18 @@ export function parse(
     if (isDateTime(text)) {
       return text;
     }
+
     if (isDate(text)) {
       return dateTime(text);
     }
+
     // We got some non string which is not a moment nor Date. TS should be able to check for that but not always.
     return undefined;
   } else {
-    let time;
+    let time: DateTime;
     let mathString = '';
-    let index;
-    let parseString;
+    let index = -1;
+    let parseString = '';
 
     if (text.substring(0, 3) === 'now') {
       time = dateTimeForTimeZone(timezone);
@@ -102,15 +112,14 @@ export function isValid(text: string | DateTime): boolean {
  * @param time
  * @param roundUp If true it will round the time to endOf time unit, otherwise to startOf time unit.
  */
-// TODO: Had to revert Andrejs `time: moment.Moment` to `time: any`
 export function parseDateMath(
   mathString: string,
-  time: any,
+  time: DateTime,
   roundUp?: boolean,
   fiscalYearStartMonth = 0
 ): DateTime | undefined {
   const strippedMathString = mathString.replace(/\s/g, '');
-  const dateTime = time;
+  const result = dateTime(time);
   let i = 0;
   const len = strippedMathString.length;
 
@@ -118,7 +127,7 @@ export function parseDateMath(
     const c = strippedMathString.charAt(i++);
     let type;
     let num;
-    let unit;
+    let unitString: string;
     let isFiscal = false;
 
     if (c === '/') {
@@ -152,51 +161,54 @@ export function parseDateMath(
         return undefined;
       }
     }
-    unit = strippedMathString.charAt(i++);
 
-    if (unit === 'f') {
-      unit = strippedMathString.charAt(i++);
+    unitString = strippedMathString.charAt(i++);
+
+    if (unitString === 'f') {
+      unitString = strippedMathString.charAt(i++);
       isFiscal = true;
     }
+
+    const unit = unitString as DurationUnit;
 
     if (!includes(units, unit)) {
       return undefined;
     } else {
       if (type === 0) {
         if (isFiscal) {
-          roundToFiscal(fiscalYearStartMonth, dateTime, unit, roundUp);
+          roundToFiscal(fiscalYearStartMonth, result, unit, roundUp);
         } else {
           if (roundUp) {
-            dateTime.endOf(unit);
+            result.endOf(unit);
           } else {
-            dateTime.startOf(unit);
+            result.startOf(unit);
           }
         }
       } else if (type === 1) {
-        dateTime.add(num, unit);
+        result.add(num, unit);
       } else if (type === 2) {
-        dateTime.subtract(num, unit);
+        result.subtract(num, unit);
       }
     }
   }
-  return dateTime;
+  return result;
 }
 
-export function roundToFiscal(fyStartMonth: number, dateTime: any, unit: string, roundUp: boolean | undefined) {
+export function roundToFiscal(fyStartMonth: number, dateTime: DateTime, unit: string, roundUp: boolean | undefined) {
   switch (unit) {
     case 'y':
       if (roundUp) {
-        roundToFiscal(fyStartMonth, dateTime, unit, false).add(11, 'M').endOf('M');
+        roundToFiscal(fyStartMonth, dateTime, unit, false)?.add(11, 'M').endOf('M');
       } else {
-        dateTime.subtract((dateTime.month() - fyStartMonth + 12) % 12, 'M').startOf('M');
+        dateTime.subtract((dateTimeAsMoment(dateTime).month() - fyStartMonth + 12) % 12, 'M').startOf('M');
       }
       return dateTime;
     case 'Q':
       if (roundUp) {
-        roundToFiscal(fyStartMonth, dateTime, unit, false).add(2, 'M').endOf('M');
+        roundToFiscal(fyStartMonth, dateTime, unit, false)?.add(2, 'M').endOf('M');
       } else {
         // why + 12? to ensure this number is always a positive offset from fyStartMonth
-        dateTime.subtract((dateTime.month() - fyStartMonth + 12) % 3, 'M').startOf('M');
+        dateTime.subtract((dateTimeAsMoment(dateTime).month() - fyStartMonth + 12) % 3, 'M').startOf('M');
       }
       return dateTime;
     default:

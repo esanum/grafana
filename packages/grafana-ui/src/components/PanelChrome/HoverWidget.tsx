@@ -1,5 +1,6 @@
 import { css, cx } from '@emotion/css';
-import React, { ReactElement, useCallback, useRef } from 'react';
+import { ReactElement, useCallback, useRef } from 'react';
+import * as React from 'react';
 
 import { GrafanaTheme2 } from '@grafana/data';
 import { selectors as e2eSelectors } from '@grafana/e2e-selectors';
@@ -48,7 +49,6 @@ export function HoverWidget({ menu, title, dragClass, children, offset = -32, on
           <Icon name="expand-arrows" className={styles.draggableIcon} />
         </div>
       )}
-      {!title && <h6 className={cx(styles.untitled, { [styles.draggable]: !!dragClass }, dragClass)}>Untitled</h6>}
       {children}
       {menu && (
         <PanelMenu
@@ -67,7 +67,9 @@ function getStyles(theme: GrafanaTheme2) {
   return {
     container: css({
       label: 'hover-container-widget',
-      transition: `all .1s linear`,
+      [theme.transitions.handleMotion('no-preference', 'reduce')]: {
+        transition: `all .1s linear`,
+      },
       display: 'flex',
       position: 'absolute',
       zIndex: 1,
@@ -102,12 +104,6 @@ function getStyles(theme: GrafanaTheme2) {
       '&:hover': {
         background: theme.colors.secondary.main,
       },
-    }),
-    untitled: css({
-      color: theme.colors.text.disabled,
-      fontStyle: 'italic',
-      padding: theme.spacing(0, 1),
-      marginBottom: 0,
     }),
     draggableIcon: css({
       transform: 'rotate(45deg)',

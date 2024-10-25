@@ -12,16 +12,23 @@ type PluginArchiveInfo struct {
 	Checksum string
 }
 
-// PluginRepo is (a subset of) the JSON response from /api/plugins/repo/$pluginID
-type PluginRepo struct {
-	Versions []Version `json:"versions"`
+// PluginVersions is the JSON response from /api/plugins/$pluginID/versions
+type PluginVersions struct {
+	Versions []Version `json:"items"`
 }
 
 type Version struct {
-	Version string              `json:"version"`
-	Arch    map[string]ArchMeta `json:"arch"`
+	Version           string              `json:"version"`
+	Arch              map[string]ArchMeta `json:"packages"`
+	URL               string              `json:"url"`
+	CreatedAt         string              `json:"createdAt"`
+	IsCompatible      *bool               `json:"isCompatible,omitempty"`
+	GrafanaDependency string              `json:"grafanaDependency"`
 }
 
 type ArchMeta struct {
-	SHA256 string `json:"sha256"`
+	SHA256      string `json:"sha256"`
+	MD5         string `json:"md5"`
+	PackageName string `json:"packageName"`
+	DownloadURL string `json:"downloadUrl"`
 }

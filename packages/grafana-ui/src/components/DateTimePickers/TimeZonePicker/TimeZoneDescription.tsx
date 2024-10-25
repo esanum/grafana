@@ -1,5 +1,5 @@
 import { css } from '@emotion/css';
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 
 import { GrafanaTheme2, TimeZoneInfo } from '@grafana/data';
 
@@ -26,6 +26,11 @@ const useDescription = (info?: TimeZoneInfo): string => {
 
     if (!info) {
       return '';
+    }
+
+    if (info.name === 'Europe/Simferopol') {
+      // See https://github.com/grafana/grafana/issues/72031
+      return 'Ukraine, EEST';
     }
 
     if (info.countries.length > 0) {

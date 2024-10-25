@@ -1,9 +1,9 @@
 import { css, cx } from '@emotion/css';
+import { autoUpdate, flip, shift, useClick, useDismiss, useFloating, useInteractions } from '@floating-ui/react';
 import { useDialog } from '@react-aria/dialog';
 import { FocusScope } from '@react-aria/focus';
 import { useOverlay } from '@react-aria/overlays';
-import React, { FormEvent, useCallback, useRef, useState } from 'react';
-import { usePopper } from 'react-popper';
+import { FormEvent, useCallback, useRef, useState } from 'react';
 
 import { RelativeTimeRange, GrafanaTheme2, TimeOption } from '@grafana/data';
 
@@ -59,11 +59,30 @@ export function RelativeTimeRangePicker(props: RelativeTimeRangePickerProps) {
   );
   const { dialogProps } = useDialog({}, ref);
 
-  const [markerElement, setMarkerElement] = useState<HTMLDivElement | null>(null);
-  const [selectorElement, setSelectorElement] = useState<HTMLDivElement | null>(null);
-  const popper = usePopper(markerElement, selectorElement, {
-    placement: 'auto-start',
+  // the order of middleware is important!
+  // see https://floating-ui.com/docs/arrow#order
+  const middleware = [
+    flip({
+      // see https://floating-ui.com/docs/flip#combining-with-shift
+      crossAxis: false,
+      boundary: document.body,
+    }),
+    shift(),
+  ];
+
+  const { context, refs, floatingStyles } = useFloating({
+    open: isOpen,
+    placement: 'bottom-start',
+    onOpenChange: setIsOpen,
+    middleware,
+    whileElementsMounted: autoUpdate,
+    strategy: 'fixed',
   });
+
+  const click = useClick(context);
+  const dismiss = useDismiss(context);
+
+  const { getReferenceProps, getFloatingProps } = useInteractions([dismiss, click]);
 
   const styles = useStyles2(getStyles(from.validation.errorMessage, to.validation.errorMessage));
 
@@ -108,14 +127,24 @@ export function RelativeTimeRangePicker(props: RelativeTimeRangePickerProps) {
     setIsOpen(false);
   };
 
+  const { from: timeOptionFrom, to: timeOptionTo } = timeOption;
+
   return (
-    <div className={styles.container} ref={setMarkerElement}>
-      <button className={styles.pickerInput} type="button" onClick={onOpen}>
+    <div className={styles.container}>
+      <button
+        ref={refs.setReference}
+        className={styles.pickerInput}
+        type="button"
+        onClick={onOpen}
+        {...getReferenceProps()}
+      >
         <span className={styles.clockIcon}>
           <Icon name="clock-nine" />
         </span>
         <span>
-          {timeOption.from} to {timeOption.to}
+          <Trans i18nKey="time-picker.time-range.from-to">
+            {{ timeOptionFrom }} to {{ timeOptionTo }}
+          </Trans>
         </span>
         <span className={styles.caretIcon}>
           <Icon name={isOpen ? 'angle-up' : 'angle-down'} size="lg" />
@@ -126,12 +155,7 @@ export function RelativeTimeRangePicker(props: RelativeTimeRangePickerProps) {
           <div role="presentation" className={styles.backdrop} {...underlayProps} />
           <FocusScope contain autoFocus restoreFocus>
             <div ref={ref} {...overlayProps} {...dialogProps}>
-              <div
-                className={styles.content}
-                ref={setSelectorElement}
-                style={popper.styles.popper}
-                {...popper.attributes}
-              >
+              <div className={styles.content} ref={refs.setFloating} style={floatingStyles} {...getFloatingProps()}>
                 <div className={styles.body}>
                   <CustomScrollbar className={styles.leftSide} hideHorizontalTrack>
                     <TimeRangeList
@@ -170,7 +194,7 @@ export function RelativeTimeRangePicker(props: RelativeTimeRangePickerProps) {
                       />
                     </Field>
                     <Button aria-label="TimePicker submit button" onClick={onApply}>
-                      Apply time range
+                      <Trans i18nKey="time-picker.time-range.apply">Apply time range</Trans>
                     </Button>
                   </div>
                 </div>
@@ -188,16 +212,26 @@ const TooltipContent = () => {
   return (
     <>
       <div className={styles.supported}>
-        Supported formats: <code className={styles.tooltip}>now-[digit]s/m/h/d/w</code>
+        <Trans i18nKey="time-picker.time-range.supported-formats">
+          Supported formats: <code className={styles.tooltip}>now-[digit]s/m/h/d/w</code>
+        </Trans>
       </div>
-      <div>Example: to select a time range from 10 minutes ago to now</div>
-      <code className={styles.tooltip}>From: now-10m To: now</code>
+      <div>
+        <Trans i18nKey="time-picker.time-range.example">
+          Example: to select a time range from 10 minutes ago to now
+        </Trans>
+      </div>
+      <code className={styles.tooltip}>
+        <Trans i18nKey="time-picker.time-range.example-details">From: now-10m To: now</Trans>
+      </code>
       <div className={styles.link}>
-        For more information see{' '}
-        <a href="https://grafana.com/docs/grafana/latest/dashboards/time-range-controls/">
-          docs <Icon name="external-link-alt" />
-        </a>
-        .
+        <Trans i18nKey="time-picker.time-range.more-info">
+          For more information see{' '}
+          <a href="https://grafana.com/docs/grafana/latest/dashboards/time-range-controls/">
+            docs <Icon name="external-link-alt" />
+          </a>
+          .
+        </Trans>
       </div>
     </>
   );

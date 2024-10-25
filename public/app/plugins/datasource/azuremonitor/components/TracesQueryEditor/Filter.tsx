@@ -1,8 +1,10 @@
 import { cx } from '@emotion/css';
-import React, { RefCallback, SyntheticEvent, useState } from 'react';
+import { RefCallback, SyntheticEvent, useState } from 'react';
+import * as React from 'react';
 import { lastValueFrom } from 'rxjs';
 
-import { CoreApp, DataFrame, SelectableValue, TimeRange } from '@grafana/data';
+import { CoreApp, DataFrame, getDefaultTimeRange, SelectableValue, TimeRange } from '@grafana/data';
+import { selectors } from '@grafana/e2e-selectors';
 import { AccessoryButton } from '@grafana/experimental';
 import {
   HorizontalGroup,
@@ -24,10 +26,10 @@ export interface FilterProps {
   datasource: Datasource;
   propertyMap: Map<string, SelectableValue[]>;
   setPropertyMap: React.Dispatch<React.SetStateAction<Map<string, Array<SelectableValue<string>>>>>;
-  timeRange: TimeRange;
   queryTraceTypes: string[];
   properties: string[];
   variableOptionGroup: VariableOptionGroup;
+  range?: TimeRange;
 }
 
 const onFieldChange = <Key extends keyof AzureTracesFilter>(
@@ -50,11 +52,11 @@ const onFieldChange = <Key extends keyof AzureTracesFilter>(
 const getTraceProperties = async (
   query: AzureMonitorQuery,
   datasource: Datasource,
-  timeRange: TimeRange,
   traceTypes: string[],
   propertyMap: Map<string, SelectableValue[]>,
   setPropertyMap: React.Dispatch<React.SetStateAction<Map<string, Array<SelectableValue<string>>>>>,
-  filter?: Partial<AzureTracesFilter>
+  filter?: Partial<AzureTracesFilter>,
+  range?: TimeRange
 ): Promise<SelectableValue[]> => {
   const { azureTraces } = query;
   if (!azureTraces) {
@@ -97,7 +99,7 @@ const getTraceProperties = async (
           queryType: AzureQueryType.LogAnalytics,
         },
       ],
-      range: timeRange,
+      range: range || getDefaultTimeRange(),
     })
   );
   if (results.data.length > 0) {
@@ -164,7 +166,7 @@ const Option = (props: React.PropsWithChildren<OptionProps>) => {
         data.isDisabled && styles.optionDisabled
       )}
       {...innerProps}
-      aria-label="Select option"
+      data-testid={selectors.components.Select.option}
       title={data.title}
       onClick={onClickMultiOption}
       onKeyDown={onClickMultiOption}
@@ -191,13 +193,13 @@ const Filter = (
     datasource,
     propertyMap,
     setPropertyMap,
-    timeRange,
     queryTraceTypes,
     properties,
     item,
     onChange,
     onDelete,
     variableOptionGroup,
+    range,
   } = props;
   const [loading, setLoading] = useState(false);
   const [values, setValues] = useState<Array<SelectableValue<string> | VariableOptionGroup>>(
@@ -215,11 +217,11 @@ const Filter = (
         const promise = await getTraceProperties(
           query,
           datasource,
-          timeRange,
           queryTraceTypes,
           propertyMap,
           setPropertyMap,
-          item
+          item,
+          range
         );
         setValues(addValueToOptions(promise, variableOptionGroup));
         setLoading(false);
@@ -248,7 +250,6 @@ const Filter = (
         width={25}
       />
       <ButtonSelect<string>
-        placeholder="Operator"
         value={item.operation ? { label: item.operation === 'eq' ? '=' : '!=', value: item.operation } : undefined}
         options={[
           { label: '=', value: 'eq' },

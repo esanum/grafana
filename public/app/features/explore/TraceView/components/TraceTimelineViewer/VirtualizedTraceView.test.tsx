@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 import { render, screen } from '@testing-library/react';
-import React from 'react';
 
 import traceGenerator from '../demo/trace-generators';
 import transformTraceData from '../model/transform-trace-data';
@@ -25,7 +24,7 @@ import VirtualizedTraceView, { VirtualizedTraceViewProps } from './VirtualizedTr
 jest.mock('./SpanTreeOffset');
 
 const trace = transformTraceData(traceGenerator.trace({ numberOfSpans: 2 }))!;
-const topOfExploreViewRef = jest.fn();
+
 let props = {
   childrenHiddenIDs: new Set(),
   childrenToggle: jest.fn(),
@@ -37,22 +36,22 @@ let props = {
   detailTagsToggle: jest.fn(),
   detailToggle: jest.fn(),
   findMatchesIDs: null,
-  registerAccessors: jest.fn(),
   setSpanNameColumnWidth: jest.fn(),
   spanNameColumnWidth: 0.5,
   trace,
   uiFind: 'uiFind',
-  topOfExploreViewRef,
+  topOfViewRef: jest.fn(),
 } as unknown as VirtualizedTraceViewProps;
 
 describe('<VirtualizedTraceViewImpl>', () => {
   beforeEach(() => {
     jest.mocked(SpanTreeOffset).mockReturnValue(<div />);
-    Object.keys(props).forEach((key) => {
-      if (typeof props[key as keyof VirtualizedTraceViewProps] === 'function') {
-        (props[key as keyof VirtualizedTraceViewProps] as jest.Mock).mockReset();
+    let key: keyof VirtualizedTraceViewProps;
+    for (key in props) {
+      if (typeof props[key] === 'function') {
+        (props[key] as jest.Mock).mockReset();
       }
-    });
+    }
   });
 
   it('renders service name, operation name and duration for each span', () => {

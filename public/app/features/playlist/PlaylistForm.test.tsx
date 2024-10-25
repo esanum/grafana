@@ -1,6 +1,5 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import React from 'react';
 
 import { PlaylistForm } from './PlaylistForm';
 import { Playlist } from './types';
@@ -108,6 +107,7 @@ describe('PlaylistForm', () => {
       await userEvent.click(screen.getByRole('button', { name: /save/i }));
       expect(onSubmitMock).toHaveBeenCalledTimes(1);
       expect(onSubmitMock).toHaveBeenCalledWith({
+        uid: 'foo',
         name: 'A test playlist',
         interval: '10m',
         items: [

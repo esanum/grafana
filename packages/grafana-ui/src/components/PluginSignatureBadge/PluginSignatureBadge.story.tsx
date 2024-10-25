@@ -1,16 +1,12 @@
 import { Meta, StoryFn } from '@storybook/react';
-import React from 'react';
 
 import { PluginSignatureStatus } from '@grafana/data';
 import { PluginSignatureBadge } from '@grafana/ui';
-
-import { withCenteredStory } from '../../utils/storybook/withCenteredStory';
 
 import mdx from './PluginSignatureBadge.mdx';
 
 const meta: Meta<typeof PluginSignatureBadge> = {
   title: 'Data Display/PluginSignatureBadge',
-  decorators: [withCenteredStory],
   component: PluginSignatureBadge,
   argTypes: {
     status: {

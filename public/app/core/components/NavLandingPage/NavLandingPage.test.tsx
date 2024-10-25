@@ -1,5 +1,4 @@
 import { render, screen } from '@testing-library/react';
-import React from 'react';
 import { TestProvider } from 'test/helpers/TestProvider';
 
 import { config } from '@grafana/runtime';
@@ -39,7 +38,7 @@ describe('NavLandingPage', () => {
     ],
   };
 
-  const setup = () => {
+  const setup = (showHeader = false) => {
     config.bootData.navTree = [
       {
         text: mockSectionTitle,
@@ -50,9 +49,10 @@ describe('NavLandingPage', () => {
       },
     ];
 
+    const header = showHeader ? <h3>Custom Header</h3> : undefined;
     return render(
       <TestProvider>
-        <NavLandingPage navId={mockId} />
+        <NavLandingPage navId={mockId} header={header} />
       </TestProvider>
     );
   };
@@ -77,5 +77,10 @@ describe('NavLandingPage', () => {
     setup();
     expect(screen.getByText(mockChild1.subTitle)).toBeInTheDocument();
     expect(screen.getByText(mockChild2.subTitle)).toBeInTheDocument();
+  });
+
+  it('renders the custom header when supplied', () => {
+    setup(true);
+    expect(screen.getByRole('heading', { name: 'Custom Header' })).toBeInTheDocument();
   });
 });

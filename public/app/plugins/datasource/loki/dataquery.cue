@@ -47,9 +47,9 @@ composableKinds: DataQuery: {
 
 				#LokiQueryType: "range" | "instant" | "stream" @cuetsy(kind="enum")
 
-				#SupportingQueryType: "logsVolume" | "logsSample" | "dataSample" @cuetsy(kind="enum")
+				#SupportingQueryType: "logsVolume" | "logsSample" | "dataSample" | "infiniteScroll" @cuetsy(kind="enum")
 
-				#LokiQueryDirection: "forward" | "backward" @cuetsy(kind="enum")
+				#LokiQueryDirection: "forward" | "backward" | "scan" @cuetsy(kind="enum")
 			}
 		}]
 		lenses: []

@@ -45,7 +45,7 @@ See note in the [introduction]({{< ref "#external-group-synchronization-api" >}}
 GET /api/teams/1/groups HTTP/1.1
 Accept: application/json
 Content-Type: application/json
-Authorization: Basic YWRtaW46YWRtaW4=
+Authorization: Bearer glsa_kcVxDhZtu5ISOZIEt
 ```
 
 **Example Response**:
@@ -84,10 +84,10 @@ See note in the [introduction]({{< ref "#external-group-synchronization-api" >}}
 **Example Request**:
 
 ```http
-POST /api/teams/1/members HTTP/1.1
+POST /api/teams/1/groups HTTP/1.1
 Accept: application/json
 Content-Type: application/json
-Authorization: Basic YWRtaW46YWRtaW4=
+Authorization: Bearer YWRtaW46YWRtaW4=
 
 {
   "groupId": "cn=editors,ou=groups,dc=grafana,dc=org"
@@ -113,7 +113,7 @@ Status Codes:
 
 ## Remove External Group
 
-`DELETE /api/teams/:teamId/groups/:groupId`
+`DELETE /api/teams/:teamId/groups?groupId=external-group-id`
 
 **Required permissions**
 
@@ -126,10 +126,10 @@ See note in the [introduction]({{< ref "#external-group-synchronization-api" >}}
 **Example Request**:
 
 ```http
-DELETE /api/teams/1/groups/cn=editors,ou=groups,dc=grafana,dc=org HTTP/1.1
+DELETE /api/teams/1/groups?groupId=cn%3Deditors%2Cou%3Dgroups%2Cdc%3Dgrafana%2Cdc%3Dorg HTTP/1.1
 Accept: application/json
 Content-Type: application/json
-Authorization: Basic YWRtaW46YWRtaW4=
+Authorization: Bearer glsa_kcVxDhZtu5ISOZIEt
 ```
 
 **Example Response**:

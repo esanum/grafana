@@ -1,5 +1,5 @@
 import { css } from '@emotion/css';
-import React, { useState } from 'react';
+import { useState } from 'react';
 
 import { config, reportInteraction } from '@grafana/runtime';
 import { useStyles2, MenuItem, Icon, ContextMenu } from '@grafana/ui';
@@ -9,6 +9,7 @@ import { SpanLinkDef } from '../types/links';
 interface SpanLinksProps {
   links: SpanLinkDef[];
   datasourceType: string;
+  color: string;
 }
 
 const renderMenuItems = (
@@ -41,20 +42,21 @@ const renderMenuItems = (
           : undefined
       }
       url={link.href}
+      target={link.target}
       className={styles.menuItem}
     />
   ));
 };
 
-export const SpanLinksMenu = ({ links, datasourceType }: SpanLinksProps) => {
-  const styles = useStyles2(getStyles);
+export const SpanLinksMenu = ({ links, datasourceType, color }: SpanLinksProps) => {
+  const styles = useStyles2(() => getStyles(color));
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
 
   const closeMenu = () => setIsMenuOpen(false);
 
   return (
-    <div data-testid="SpanLinksMenu">
+    <div data-testid="SpanLinksMenu" className={styles.wrapper}>
       <button
         onClick={(e) => {
           setIsMenuOpen(true);
@@ -65,7 +67,7 @@ export const SpanLinksMenu = ({ links, datasourceType }: SpanLinksProps) => {
         }}
         className={styles.button}
       >
-        <Icon name="link" className={styles.button} />
+        <Icon name="link" className={styles.icon} />
       </button>
 
       {isMenuOpen ? (
@@ -81,17 +83,25 @@ export const SpanLinksMenu = ({ links, datasourceType }: SpanLinksProps) => {
   );
 };
 
-const getStyles = () => {
-  return {
-    button: css`
-      background: transparent;
-      border: none;
-      padding: 0;
-      margin: 0 3px 0 0;
-    `,
-    menuItem: css`
-      max-width: 60ch;
-      overflow: hidden;
-    `,
-  };
-};
+const getStyles = (color: string) => ({
+  wrapper: css({
+    border: 'none',
+    background: `${color}10`,
+    borderBottom: `1px solid ${color}CF`,
+    paddingRight: '4px',
+  }),
+  button: css({
+    background: 'transparent',
+    border: 'none',
+    padding: 0,
+  }),
+  icon: css({
+    background: 'transparent',
+    border: 'none',
+    padding: 0,
+  }),
+  menuItem: css({
+    maxWidth: '60ch',
+    overflow: 'hidden',
+  }),
+});

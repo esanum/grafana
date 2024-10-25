@@ -1,11 +1,23 @@
 import { css } from '@emotion/css';
-import React from 'react';
 
-import { DataFrame, FieldMatcherID, getFrameDisplayName, PanelProps, SelectableValue } from '@grafana/data';
-import { PanelDataErrorView } from '@grafana/runtime';
+import {
+  ActionModel,
+  DashboardCursorSync,
+  DataFrame,
+  FieldMatcherID,
+  getFrameDisplayName,
+  InterpolateFunction,
+  PanelProps,
+  SelectableValue,
+  Field,
+} from '@grafana/data';
+import { config, PanelDataErrorView } from '@grafana/runtime';
 import { Select, Table, usePanelContext, useTheme2 } from '@grafana/ui';
 import { TableSortByFieldState } from '@grafana/ui/src/components/Table/types';
 
+import { getActions } from '../../../features/actions/utils';
+
+import { hasDeprecatedParentRowIndex, migrateFromParentRowIndexToNestedFrames } from './migrations';
 import { Options } from './panelcfg.gen';
 
 interface Props extends PanelProps<Options> {}
@@ -15,16 +27,15 @@ export function TablePanel(props: Props) {
 
   const theme = useTheme2();
   const panelContext = usePanelContext();
-  const frames = data.series;
-  const mainFrames = frames.filter((f) => f.meta?.custom?.parentRowIndex === undefined);
-  const subFrames = frames.filter((f) => f.meta?.custom?.parentRowIndex !== undefined);
-  const count = mainFrames?.length;
-  const hasFields = mainFrames[0]?.fields.length;
-  const currentIndex = getCurrentFrameIndex(mainFrames, options);
-  const main = mainFrames[currentIndex];
+  const frames = hasDeprecatedParentRowIndex(data.series)
+    ? migrateFromParentRowIndexToNestedFrames(data.series)
+    : data.series;
+  const count = frames?.length;
+  const hasFields = frames.some((frame) => frame.fields.length > 0);
+  const currentIndex = getCurrentFrameIndex(frames, options);
+  const main = frames[currentIndex];
 
   let tableHeight = height;
-  let subData = subFrames;
 
   if (!count || !hasFields) {
     return <PanelDataErrorView panelId={id} fieldConfig={fieldConfig} data={data} />;
@@ -35,8 +46,9 @@ export function TablePanel(props: Props) {
     const padding = theme.spacing.gridSize;
 
     tableHeight = height - inputHeight - padding;
-    subData = subFrames.filter((f) => f.refId === main.refId);
   }
+
+  const enableSharedCrosshair = panelContext.sync && panelContext.sync() !== DashboardCursorSync.Off;
 
   const tableElement = (
     <Table
@@ -52,9 +64,11 @@ export function TablePanel(props: Props) {
       onCellFilterAdded={panelContext.onAddAdHocFilter}
       footerOptions={options.footer}
       enablePagination={options.footer?.enablePagination}
-      subData={subData}
       cellHeight={options.cellHeight}
       timeRange={timeRange}
+      enableSharedCrosshair={config.featureToggles.tableSharedCrosshair && enableSharedCrosshair}
+      fieldConfig={fieldConfig}
+      getActions={getCellActions}
     />
   );
 
@@ -62,7 +76,7 @@ export function TablePanel(props: Props) {
     return tableElement;
   }
 
-  const names = mainFrames.map((frame, index) => {
+  const names = frames.map((frame, index) => {
     return {
       label: getFrameDisplayName(frame),
       value: index,
@@ -127,6 +141,37 @@ function onChangeTableSelection(val: SelectableValue<number>, props: Props) {
     frameIndex: val.value || 0,
   });
 }
+
+// placeholder function; assuming the values are already interpolated
+const replaceVars: InterpolateFunction = (value: string) => value;
+
+const getCellActions = (dataFrame: DataFrame, field: Field) => {
+  if (!config.featureToggles?.vizActions) {
+    return [];
+  }
+
+  const actions: Array<ActionModel<Field>> = [];
+  const actionLookup = new Set<string>();
+
+  const actionsModel = getActions(
+    dataFrame,
+    field,
+    field.state!.scopedVars!,
+    replaceVars,
+    field.config.actions ?? [],
+    {}
+  );
+
+  actionsModel.forEach((action) => {
+    const key = `${action.title}`;
+    if (!actionLookup.has(key)) {
+      actions.push(action);
+      actionLookup.add(key);
+    }
+  });
+
+  return actions;
+};
 
 const tableStyles = {
   wrapper: css`

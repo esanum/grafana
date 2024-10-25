@@ -4,17 +4,21 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"reflect"
 	"sort"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/prometheus/common/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 
 	"github.com/grafana/grafana/pkg/util"
+	"github.com/grafana/grafana/pkg/util/cmputil"
 )
 
 func TestSortAlertRulesByGroupKeyAndIndex(t *testing.T) {
@@ -193,11 +197,10 @@ func TestSetDashboardAndPanelFromAnnotations(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			rule := AlertRuleGen(func(rule *AlertRule) {
-				rule.Annotations = tc.annotations
-				rule.DashboardUID = nil
-				rule.PanelID = nil
-			})()
+			rule := RuleGen.With(
+				RuleMuts.WithDashboardAndPanel(nil, nil),
+				RuleMuts.WithAnnotations(tc.annotations),
+			).Generate()
 			err := rule.SetDashboardAndPanelFromAnnotations()
 
 			require.Equal(t, tc.expectedError, err)
@@ -250,16 +253,25 @@ func TestPatchPartialAlertRule(t *testing.T) {
 					r.IsPaused = true
 				},
 			},
+			{
+				name: "No metadata",
+				mutator: func(r *AlertRuleWithOptionals) {
+					r.Metadata = AlertRuleMetadata{}
+				},
+			},
 		}
+
+		gen := RuleGen.With(
+			RuleMuts.WithFor(time.Duration(rand.Int63n(1000)+1)),
+			RuleMuts.WithEditorSettingsSimplifiedQueryAndExpressionsSection(true),
+		)
 
 		for _, testCase := range testCases {
 			t.Run(testCase.name, func(t *testing.T) {
 				var existing *AlertRuleWithOptionals
-				for {
-					rule := AlertRuleGen(func(rule *AlertRule) {
-						rule.For = time.Duration(rand.Int63n(1000) + 1)
-					})()
-					existing = &AlertRuleWithOptionals{AlertRule: *rule}
+				for i := 0; i < 10; i++ {
+					rule := gen.Generate()
+					existing = &AlertRuleWithOptionals{AlertRule: rule}
 					cloned := *existing
 					testCase.mutator(&cloned)
 					if !cmp.Equal(existing, cloned, cmp.FilterPath(func(path cmp.Path) bool {
@@ -339,15 +351,20 @@ func TestPatchPartialAlertRule(t *testing.T) {
 			},
 		}
 
+		gen := RuleGen.With(
+			RuleMuts.WithUniqueID(),
+			RuleMuts.WithFor(time.Duration(rand.Int63n(1000)+1)),
+		)
+
 		for _, testCase := range testCases {
 			t.Run(testCase.name, func(t *testing.T) {
 				var existing *AlertRule
 				for {
-					existing = AlertRuleGen()()
-					cloned := *existing
+					existing = gen.GenerateRef()
+					cloned := CopyRule(existing)
 					// make sure the generated rule does not match the mutated one
-					testCase.mutator(&cloned)
-					if !cmp.Equal(*existing, cloned, cmp.FilterPath(func(path cmp.Path) bool {
+					testCase.mutator(cloned)
+					if !cmp.Equal(existing, cloned, cmp.FilterPath(func(path cmp.Path) bool {
 						return path.String() == "Data.modelProps"
 					}, cmp.Ignore())) {
 						break
@@ -364,14 +381,14 @@ func TestPatchPartialAlertRule(t *testing.T) {
 
 func TestDiff(t *testing.T) {
 	t.Run("should return nil if there is no diff", func(t *testing.T) {
-		rule1 := AlertRuleGen()()
+		rule1 := RuleGen.GenerateRef()
 		rule2 := CopyRule(rule1)
 		result := rule1.Diff(rule2)
 		require.Emptyf(t, result, "expected diff to be empty. rule1: %#v, rule2: %#v\ndiff: %s", rule1, rule2, result)
 	})
 
 	t.Run("should respect fields to ignore", func(t *testing.T) {
-		rule1 := AlertRuleGen()()
+		rule1 := RuleGen.GenerateRef()
 		rule2 := CopyRule(rule1)
 		rule2.ID = rule1.ID/2 + 1
 		rule2.Version = rule1.Version/2 + 1
@@ -381,10 +398,10 @@ func TestDiff(t *testing.T) {
 	})
 
 	t.Run("should find diff in simple fields", func(t *testing.T) {
-		rule1 := AlertRuleGen()()
-		rule2 := AlertRuleGen()()
+		rule1 := RuleGen.GenerateRef()
+		rule2 := RuleGen.GenerateRef()
 
-		diffs := rule1.Diff(rule2, "Data", "Annotations", "Labels") // these fields will be tested separately
+		diffs := rule1.Diff(rule2, "Data", "Annotations", "Labels", "NotificationSettings") // these fields will be tested separately
 
 		difCnt := 0
 		if rule1.ID != rule2.ID {
@@ -495,6 +512,13 @@ func TestDiff(t *testing.T) {
 			assert.Equal(t, rule2.RuleGroupIndex, diff[0].Right.Interface())
 			difCnt++
 		}
+		if rule1.Record != rule2.Record {
+			diff := diffs.GetDiffsForField("Record")
+			assert.Len(t, diff, 1)
+			assert.Equal(t, rule1.Record, diff[0].Left.String())
+			assert.Equal(t, rule2.Record, diff[0].Right.String())
+			difCnt++
+		}
 
 		require.Lenf(t, diffs, difCnt, "Got some unexpected diffs. Either add to ignore or add assert to it")
 
@@ -504,7 +528,7 @@ func TestDiff(t *testing.T) {
 	})
 
 	t.Run("should not see difference between nil and empty Annotations", func(t *testing.T) {
-		rule1 := AlertRuleGen()()
+		rule1 := RuleGen.GenerateRef()
 		rule1.Annotations = make(map[string]string)
 		rule2 := CopyRule(rule1)
 		rule2.Annotations = nil
@@ -514,7 +538,7 @@ func TestDiff(t *testing.T) {
 	})
 
 	t.Run("should detect changes in Annotations", func(t *testing.T) {
-		rule1 := AlertRuleGen()()
+		rule1 := RuleGen.GenerateRef()
 		rule2 := CopyRule(rule1)
 
 		rule1.Annotations = map[string]string{
@@ -551,7 +575,7 @@ func TestDiff(t *testing.T) {
 	})
 
 	t.Run("should not see difference between nil and empty Labels", func(t *testing.T) {
-		rule1 := AlertRuleGen()()
+		rule1 := RuleGen.GenerateRef()
 		rule1.Annotations = make(map[string]string)
 		rule2 := CopyRule(rule1)
 		rule2.Annotations = nil
@@ -561,7 +585,7 @@ func TestDiff(t *testing.T) {
 	})
 
 	t.Run("should detect changes in Labels", func(t *testing.T) {
-		rule1 := AlertRuleGen()()
+		rule1 := RuleGen.GenerateRef()
 		rule2 := CopyRule(rule1)
 
 		rule1.Labels = map[string]string{
@@ -598,7 +622,7 @@ func TestDiff(t *testing.T) {
 	})
 
 	t.Run("should detect changes in Data", func(t *testing.T) {
-		rule1 := AlertRuleGen()()
+		rule1 := RuleGen.GenerateRef()
 		rule2 := CopyRule(rule1)
 
 		query1 := AlertQuery{
@@ -610,7 +634,7 @@ func TestDiff(t *testing.T) {
 			},
 			DatasourceUID: util.GenerateShortUID(),
 			Model:         json.RawMessage(`{ "test": "data"}`),
-			modelProps: map[string]interface{}{
+			modelProps: map[string]any{
 				"test": 1,
 			},
 		}
@@ -619,7 +643,7 @@ func TestDiff(t *testing.T) {
 
 		t.Run("should ignore modelProps", func(t *testing.T) {
 			query2 := query1
-			query2.modelProps = map[string]interface{}{
+			query2.modelProps = map[string]any{
 				"some": "other value",
 			}
 			rule2.Data = []AlertQuery{query2}
@@ -652,6 +676,21 @@ func TestDiff(t *testing.T) {
 			}
 		})
 
+		t.Run("should correctly detect no change with '<' and '>' in query", func(t *testing.T) {
+			old := query1
+			newQuery := query1
+			old.Model = json.RawMessage(`{"field1": "$A \u003c 1"}`)
+			newQuery.Model = json.RawMessage(`{"field1": "$A < 1"}`)
+			rule1.Data = []AlertQuery{old}
+			rule2.Data = []AlertQuery{newQuery}
+
+			diff := rule1.Diff(rule2)
+			assert.Nil(t, diff)
+
+			// reset rule1
+			rule1.Data = []AlertQuery{query1}
+		})
+
 		t.Run("should detect new changes in array if too many fields changed", func(t *testing.T) {
 			query2 := query1
 			query2.QueryType = "test"
@@ -678,6 +717,117 @@ func TestDiff(t *testing.T) {
 			}
 		})
 	})
+
+	t.Run("should detect changes in NotificationSettings", func(t *testing.T) {
+		rule1 := RuleGen.GenerateRef()
+
+		baseSettings := NotificationSettingsGen(NSMuts.WithGroupBy("test1", "test2"))()
+		rule1.NotificationSettings = []NotificationSettings{baseSettings}
+
+		addTime := func(d *model.Duration, duration time.Duration) *time.Duration {
+			dur := time.Duration(*d)
+			dur += duration
+			return &dur
+		}
+
+		testCases := []struct {
+			name                 string
+			notificationSettings NotificationSettings
+			diffs                cmputil.DiffReport
+		}{
+			{
+				name:                 "should detect changes in Receiver",
+				notificationSettings: CopyNotificationSettings(baseSettings, NSMuts.WithReceiver(baseSettings.Receiver+"-modified")),
+				diffs: []cmputil.Diff{
+					{
+						Path:  "NotificationSettings[0].Receiver",
+						Left:  reflect.ValueOf(baseSettings.Receiver),
+						Right: reflect.ValueOf(baseSettings.Receiver + "-modified"),
+					},
+				},
+			},
+			{
+				name:                 "should detect changes in GroupWait",
+				notificationSettings: CopyNotificationSettings(baseSettings, NSMuts.WithGroupWait(addTime(baseSettings.GroupWait, 1*time.Second))),
+				diffs: []cmputil.Diff{
+					{
+						Path:  "NotificationSettings[0].GroupWait",
+						Left:  reflect.ValueOf(*baseSettings.GroupWait),
+						Right: reflect.ValueOf(model.Duration(*addTime(baseSettings.GroupWait, 1*time.Second))),
+					},
+				},
+			},
+			{
+				name:                 "should detect changes in GroupInterval",
+				notificationSettings: CopyNotificationSettings(baseSettings, NSMuts.WithGroupInterval(addTime(baseSettings.GroupInterval, 1*time.Second))),
+				diffs: []cmputil.Diff{
+					{
+						Path:  "NotificationSettings[0].GroupInterval",
+						Left:  reflect.ValueOf(*baseSettings.GroupInterval),
+						Right: reflect.ValueOf(model.Duration(*addTime(baseSettings.GroupInterval, 1*time.Second))),
+					},
+				},
+			},
+			{
+				name:                 "should detect changes in RepeatInterval",
+				notificationSettings: CopyNotificationSettings(baseSettings, NSMuts.WithRepeatInterval(addTime(baseSettings.RepeatInterval, 1*time.Second))),
+				diffs: []cmputil.Diff{
+					{
+						Path:  "NotificationSettings[0].RepeatInterval",
+						Left:  reflect.ValueOf(*baseSettings.RepeatInterval),
+						Right: reflect.ValueOf(model.Duration(*addTime(baseSettings.RepeatInterval, 1*time.Second))),
+					},
+				},
+			},
+			{
+				name:                 "should detect changes in GroupBy",
+				notificationSettings: CopyNotificationSettings(baseSettings, NSMuts.WithGroupBy(baseSettings.GroupBy[0]+"-modified", baseSettings.GroupBy[1]+"-modified")),
+				diffs: []cmputil.Diff{
+					{
+						Path:  "NotificationSettings[0].GroupBy[0]",
+						Left:  reflect.ValueOf(baseSettings.GroupBy[0]),
+						Right: reflect.ValueOf(baseSettings.GroupBy[0] + "-modified"),
+					},
+					{
+						Path:  "NotificationSettings[0].GroupBy[1]",
+						Left:  reflect.ValueOf(baseSettings.GroupBy[1]),
+						Right: reflect.ValueOf(baseSettings.GroupBy[1] + "-modified"),
+					},
+				},
+			},
+			{
+				name:                 "should detect changes in MuteTimeIntervals",
+				notificationSettings: CopyNotificationSettings(baseSettings, NSMuts.WithMuteTimeIntervals(baseSettings.MuteTimeIntervals[0]+"-modified", baseSettings.MuteTimeIntervals[1]+"-modified")),
+				diffs: []cmputil.Diff{
+					{
+						Path:  "NotificationSettings[0].MuteTimeIntervals[0]",
+						Left:  reflect.ValueOf(baseSettings.MuteTimeIntervals[0]),
+						Right: reflect.ValueOf(baseSettings.MuteTimeIntervals[0] + "-modified"),
+					},
+					{
+						Path:  "NotificationSettings[0].MuteTimeIntervals[1]",
+						Left:  reflect.ValueOf(baseSettings.MuteTimeIntervals[1]),
+						Right: reflect.ValueOf(baseSettings.MuteTimeIntervals[1] + "-modified"),
+					},
+				},
+			},
+		}
+
+		for _, tt := range testCases {
+			t.Run(tt.name, func(t *testing.T) {
+				rule2 := CopyRule(rule1)
+				rule2.NotificationSettings = []NotificationSettings{tt.notificationSettings}
+				diffs := rule1.Diff(rule2)
+
+				cOpt := []cmp.Option{
+					cmpopts.IgnoreUnexported(cmputil.Diff{}),
+				}
+				if !cmp.Equal(diffs, tt.diffs, cOpt...) {
+					t.Errorf("Unexpected Diffs: %v", cmp.Diff(diffs, tt.diffs, cOpt...))
+				}
+			})
+		}
+	})
 }
 
 func TestSortByGroupIndex(t *testing.T) {
@@ -694,7 +844,9 @@ func TestSortByGroupIndex(t *testing.T) {
 	}
 
 	t.Run("should sort rules by GroupIndex", func(t *testing.T) {
-		rules := GenerateAlertRules(rand.Intn(15)+5, AlertRuleGen(WithUniqueGroupIndex()))
+		rules := RuleGen.With(
+			RuleMuts.WithUniqueGroupIndex(),
+		).GenerateManyRef(5, 20)
 		ensureNotSorted(t, rules, func(i, j int) bool {
 			return rules[i].RuleGroupIndex < rules[j].RuleGroupIndex
 		})
@@ -705,7 +857,10 @@ func TestSortByGroupIndex(t *testing.T) {
 	})
 
 	t.Run("should sort by ID if same GroupIndex", func(t *testing.T) {
-		rules := GenerateAlertRules(rand.Intn(15)+5, AlertRuleGen(WithUniqueID(), WithGroupIndex(rand.Int())))
+		rules := RuleGen.With(
+			RuleMuts.WithUniqueID(),
+			RuleMuts.WithGroupIndex(rand.Int()),
+		).GenerateManyRef(5, 20)
 		ensureNotSorted(t, rules, func(i, j int) bool {
 			return rules[i].ID < rules[j].ID
 		})
@@ -728,4 +883,28 @@ func TestTimeRangeYAML(t *testing.T) {
 	serialized, err := yaml.Marshal(rtr)
 	require.NoError(t, err)
 	require.Equal(t, yamlRaw, string(serialized))
+}
+
+func TestAlertRuleGetKey(t *testing.T) {
+	t.Run("should return correct key", func(t *testing.T) {
+		rule := RuleGen.GenerateRef()
+		expected := AlertRuleKey{
+			OrgID: rule.OrgID,
+			UID:   rule.UID,
+		}
+		require.Equal(t, expected, rule.GetKey())
+	})
+}
+
+func TestAlertRuleGetKeyWithGroup(t *testing.T) {
+	t.Run("should return correct key", func(t *testing.T) {
+		rule := RuleGen.With(
+			RuleMuts.WithUniqueGroupIndex(),
+		).GenerateRef()
+		expected := AlertRuleKeyWithGroup{
+			AlertRuleKey: rule.GetKey(),
+			RuleGroup:    rule.RuleGroup,
+		}
+		require.Equal(t, expected, rule.GetKeyWithGroup())
+	})
 }

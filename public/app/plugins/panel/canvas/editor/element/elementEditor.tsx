@@ -1,12 +1,14 @@
-import { get as lodashGet } from 'lodash';
+import { capitalize, get as lodashGet } from 'lodash';
 
+import { OneClickMode } from '@grafana/data';
 import { NestedPanelOptions, NestedValueAccess } from '@grafana/data/src/utils/OptionsUIBuilders';
+import { config } from '@grafana/runtime';
+import { CanvasElementOptions } from 'app/features/canvas/element';
 import {
-  CanvasElementOptions,
   canvasElementRegistry,
   DEFAULT_CANVAS_ELEMENT_CONFIG,
   defaultElementItems,
-} from 'app/features/canvas';
+} from 'app/features/canvas/registry';
 import { ElementState } from 'app/features/canvas/runtime/element';
 import { FrameState } from 'app/features/canvas/runtime/frame';
 import { Scene } from 'app/features/canvas/runtime/scene';
@@ -36,10 +38,10 @@ export function getElementEditor(opts: CanvasEditorOptions): NestedPanelOptions<
 
     // Note that canvas editor writes things to the scene!
     values: (parent: NestedValueAccess) => ({
-      getValue: (path: string) => {
+      getValue: (path) => {
         return lodashGet(opts.element.options, path);
       },
-      onChange: (path: string, value: any) => {
+      onChange: (path, value) => {
         let options = opts.element.options;
         if (path === 'type' && value) {
           const layer = canvasElementRegistry.getIfExists(value);
@@ -66,11 +68,14 @@ export function getElementEditor(opts: CanvasEditorOptions): NestedPanelOptions<
       const current = options?.type ? options.type : DEFAULT_CANVAS_ELEMENT_CONFIG.type;
       const layerTypes = getElementTypes(opts.scene.shouldShowAdvancedTypes, current).options;
 
+      const actionsEnabled = config.featureToggles.vizActions;
+
       const isUnsupported =
         !opts.scene.shouldShowAdvancedTypes && !defaultElementItems.filter((item) => item.id === options?.type).length;
 
       builder.addSelect({
         path: 'type',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/consistent-type-assertions
         name: undefined as any, // required, but hide space
         settings: {
           options: layerTypes,
@@ -96,17 +101,55 @@ export function getElementEditor(opts: CanvasEditorOptions): NestedPanelOptions<
         layer.registerOptionsUI(builder, ctx);
       }
 
-      builder.addCustomEditor({
-        category: ['Layout'],
-        id: 'content',
-        path: '__', // not used
-        name: 'Quick placement',
-        editor: PlacementEditor,
-        settings: opts,
+      const shouldAddLayoutEditor = opts.element.item.standardEditorConfig?.layout ?? true;
+      if (shouldAddLayoutEditor) {
+        builder.addCustomEditor({
+          category: ['Layout'],
+          id: 'content',
+          path: '__', // not used
+          name: 'Quick placement',
+          editor: PlacementEditor,
+          settings: opts,
+        });
+      }
+
+      const shouldAddBackgroundEditor = opts.element.item.standardEditorConfig?.background ?? true;
+      if (shouldAddBackgroundEditor) {
+        optionBuilder.addBackground(builder, ctx);
+      }
+
+      const shouldAddBorderEditor = opts.element.item.standardEditorConfig?.border ?? true;
+      if (shouldAddBorderEditor) {
+        optionBuilder.addBorder(builder, ctx);
+      }
+
+      const oneClickModeOptions = [
+        { value: OneClickMode.Off, label: capitalize(OneClickMode.Off) },
+        { value: OneClickMode.Link, label: capitalize(OneClickMode.Link) },
+      ];
+
+      let oneClickCategory = 'Data links';
+      let oneClickDescription = 'When enabled, a single click opens the first link';
+
+      if (actionsEnabled) {
+        oneClickModeOptions.push({ value: OneClickMode.Action, label: capitalize(OneClickMode.Action) });
+        oneClickCategory += ' and actions';
+        oneClickDescription += ' or action';
+      }
+
+      builder.addRadio({
+        category: [oneClickCategory],
+        path: 'oneClickMode',
+        name: 'One-click',
+        description: oneClickDescription,
+        settings: {
+          options: oneClickModeOptions,
+        },
+        defaultValue: OneClickMode.Off,
       });
 
-      optionBuilder.addBackground(builder, ctx);
-      optionBuilder.addBorder(builder, ctx);
+      optionBuilder.addDataLinks(builder, ctx);
+      optionBuilder.addActions(builder, ctx);
     },
   };
 }

@@ -1,5 +1,4 @@
 import { render, screen } from '@testing-library/react';
-import React from 'react';
 
 import { createTheme, LogLevel } from '@grafana/data';
 
@@ -21,6 +20,7 @@ const setup = (propOverrides: Partial<Props> = {}, detectedFields = ['place', 'p
     styles,
     detectedFields,
     mouseIsOver: true,
+    onBlur: jest.fn(),
     ...propOverrides,
   };
 

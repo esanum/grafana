@@ -18,7 +18,7 @@ weight: 1000
 
 # Set up image rendering
 
-Grafana supports automatic rendering of panels as PNG images. This allows Grafana to automatically generate images of your panels to include in alert notifications, [PDF export]({{< relref "../../dashboards/create-reports#export-dashboard-as-pdf" >}}), and [Reporting]({{< relref "../../dashboards/create-reports" >}}). PDF Export and Reporting are available only in [Grafana Enterprise]({{< relref "../../introduction/grafana-enterprise" >}}).
+Grafana supports automatic rendering of panels as PNG images. This allows Grafana to automatically generate images of your panels to include in alert notifications, [PDF export]({{< relref "../../dashboards/create-reports#export-dashboard-as-pdf" >}}), and [Reporting]({{< relref "../../dashboards/create-reports" >}}). PDF Export and Reporting are available only in [Grafana Enterprise]({{< relref "../../introduction/grafana-enterprise" >}}) and [Grafana Cloud](/docs/grafana-cloud/).
 
 > **Note:** Image rendering of dashboards is not supported at this time.
 
@@ -26,19 +26,19 @@ While an image is being rendered, the PNG image is temporarily written to the fi
 
 A background job runs every 10 minutes and removes temporary images. You can configure how long an image should be stored before being removed by configuring the [temp_data_lifetime]({{< relref "../configure-grafana#temp_data_lifetime" >}}) setting.
 
-You can also render a PNG by clicking hovering over the panel to display the actions menu in the top right corner, and then clicking **Share > Direct link rendered image** in the Link tab.
+You can also render a PNG by hovering over the panel to display the actions menu in the top-right corner, and then clicking **Share > Share link**. The **Render image** option is displayed in the link settings.
 
 ## Alerting and render limits
 
-Alert notifications can include images, but rendering many images at the same time can overload the server where the renderer is running. For instructions of how to configure this, see [concurrent_render_limit]({{< relref "../configure-grafana#concurrent_render_limit" >}}).
+Alert notifications can include images, but rendering many images at the same time can overload the server where the renderer is running. For instructions of how to configure this, see [max_concurrent_screenshots]({{< relref "../configure-grafana#max_concurrent_screenshots" >}}).
 
 ## Install Grafana Image Renderer plugin
 
 {{% admonition type="note" %}}
-Starting from Grafana v7.0.0, all PhantomJS support has been removed. Please use the Grafana Image Renderer plugin or remote rendering service.
+All PhantomJS support has been removed. Instead, use the Grafana Image Renderer plugin or remote rendering service.
 {{% /admonition %}}
 
-To install the plugin, refer to the [Grafana Image Renderer Installation instructions](/grafana/plugins/grafana-image-renderer#installation).
+To install the plugin, refer to the [Grafana Image Renderer Installation instructions](/grafana/plugins/grafana-image-renderer/?tab=installation#installation).
 
 ## Configuration
 
@@ -82,13 +82,15 @@ AUTH_TOKEN=-
 
 ```json
 {
-  "security": {
-    "authToken": "-"
+  "service": {
+    "security": {
+      "authToken": "-"
+    }
   }
 }
 ```
 
-See the [Grafana configuration]({{< relref "../configure-grafana#renderer_token" >}}) for how to configure the token in Grafana.
+See [Grafana configuration]({{< relref "../configure-grafana#renderer_token" >}}) for how to configure the token in Grafana.
 
 ### Rendering mode
 
@@ -207,6 +209,47 @@ HTTP_PORT=0
 }
 ```
 
+#### HTTP protocol
+
+{{% admonition type="note" %}}
+HTTPS protocol is supported in the image renderer v3.11.0 and later.
+{{% /admonition %}}
+
+Change the protocol of the server, it can be `http` or `https`. Default is `http`.
+
+```json
+{
+  "service": {
+    "protocol": "http"
+  }
+}
+```
+
+#### HTTPS certificate and key file
+
+Path to the image renderer certificate and key file used to start an HTTPS server.
+
+```json
+{
+  "service": {
+    "certFile": "./path/to/cert",
+    "certKey": "./path/to/key"
+  }
+}
+```
+
+#### HTTPS min TLS version
+
+Minimum TLS version allowed. Accepted values are: `TLSv1.2`, `TLSv1.3`. Default is `TLSv1.2`.
+
+```json
+{
+  "service": {
+    "minTLSVersion": "TLSv1.2"
+  }
+}
+```
+
 #### Enable Prometheus metrics
 
 You can enable [Prometheus](https://prometheus.io/) metrics endpoint `/metrics` using the environment variable `ENABLE_METRICS`. Node.js and render request duration metrics are included, see [Enable Prometheus metrics endpoint]({{< relref "./monitoring#enable-prometheus-metrics-endpoint" >}}) for details.
@@ -225,6 +268,25 @@ ENABLE_METRICS=true
       "collectDefaultMetrics": true,
       "requestDurationBuckets": [1, 5, 7, 9, 11, 13, 15, 20, 30]
     }
+  }
+}
+```
+
+#### Enable detailed timing metrics
+
+With the [Prometheus metrics enabled](#enable-prometheus-metrics), you can also enable detailed metrics to get the duration of every rendering step.
+
+Default is `false`.
+
+```bash
+# Available from v3.9.0+
+RENDERING_TIMING_METRICS=true
+```
+
+```json
+{
+  "rendering": {
+    "timingMetrics": true
   }
 }
 ```
@@ -311,7 +373,7 @@ CHROME_BIN="/usr/bin/chromium-browser"
 
 #### Start browser with additional arguments
 
-Additional arguments to pass to the headless browser instance. Defaults are `--no-sandbox,--disable-gpu`. The list of Chromium flags can be found [here](https://peter.sh/experiments/chromium-command-line-switches/) and the list of flags used as defaults by Puppeteer can be found [there](https://github.com/puppeteer/puppeteer/blob/main/src/node/Launcher.ts#L172). Multiple arguments is separated with comma-character.
+Additional arguments to pass to the headless browser instance. Defaults are `--no-sandbox,--disable-gpu`. The list of Chromium flags can be found [here](https://peter.sh/experiments/chromium-command-line-switches/) and the list of flags used as defaults by Puppeteer can be found [there](https://cri.dev/posts/2020-04-04-Full-list-of-Chromium-Puppeteer-flags/). Multiple arguments is separated with comma-character.
 
 ```bash
 RENDERING_ARGS=--no-sandbox,--disable-setuid-sandbox,--disable-dev-shm-usage,--disable-accelerated-2d-canvas,--disable-gpu,--window-size=1280x758
@@ -370,6 +432,11 @@ BROWSER_TZ=Europe/Stockholm
 Instruct headless browser instance to use a default language when not provided by Grafana, e.g. when rendering panel image of alert.
 Refer to the HTTP header Accept-Language to understand how to format this value.
 
+```bash
+# Available from v3.9.0+
+RENDERING_LANGUAGE="fr-CH, fr;q=0.9, en;q=0.8, de;q=0.7, *;q=0.5"
+```
+
 ```json
 {
   "rendering": {
@@ -381,6 +448,11 @@ Refer to the HTTP header Accept-Language to understand how to format this value.
 #### Viewport width
 
 Default viewport width when width is not specified in the rendering request. Default is `1000`.
+
+```bash
+# Available from v3.9.0+
+RENDERING_VIEWPORT_WIDTH=1000
+```
 
 ```json
 {
@@ -394,6 +466,11 @@ Default viewport width when width is not specified in the rendering request. Def
 
 Default viewport height when height is not specified in the rendering request. Default is `500`.
 
+```bash
+# Available from v3.9.0+
+RENDERING_VIEWPORT_HEIGHT=500
+```
+
 ```json
 {
   "rendering": {
@@ -406,6 +483,11 @@ Default viewport height when height is not specified in the rendering request. D
 
 Limit the maximum viewport width that can be requested. Default is `3000`.
 
+```bash
+# Available from v3.9.0+
+RENDERING_VIEWPORT_MAX_WIDTH=1000
+```
+
 ```json
 {
   "rendering": {
@@ -417,6 +499,11 @@ Limit the maximum viewport width that can be requested. Default is `3000`.
 #### Viewport maximum height
 
 Limit the maximum viewport height that can be requested. Default is `3000`.
+
+```bash
+# Available from v3.9.0+
+RENDERING_VIEWPORT_MAX_HEIGHT=500
+```
 
 ```json
 {
@@ -431,6 +518,11 @@ Limit the maximum viewport height that can be requested. Default is `3000`.
 Specify default device scale factor for rendering images. `2` is enough for monitor resolutions, `4` would be better for printed material. Setting a higher value affects performance and memory. Default is `1`.
 This can be overridden in the rendering request.
 
+```bash
+# Available from v3.9.0+
+RENDERING_VIEWPORT_DEVICE_SCALE_FACTOR=2
+```
+
 ```json
 {
   "rendering": {
@@ -442,6 +534,11 @@ This can be overridden in the rendering request.
 #### Maximum device scale factor
 
 Limit the maximum device scale factor that can be requested. Default is `4`.
+
+```bash
+# Available from v3.9.0+
+RENDERING_VIEWPORT_MAX_DEVICE_SCALE_FACTOR=4
+```
 
 ```json
 {

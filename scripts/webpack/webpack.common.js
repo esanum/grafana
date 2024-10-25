@@ -1,4 +1,3 @@
-const CopyWebpackPlugin = require('copy-webpack-plugin');
 const path = require('path');
 const webpack = require('webpack');
 
@@ -8,6 +7,7 @@ module.exports = {
   target: 'web',
   entry: {
     app: './public/app/index.ts',
+    swagger: './public/swagger/index.tsx',
   },
   output: {
     clean: true,
@@ -33,7 +33,16 @@ module.exports = {
         '@locker/near-membrane-dom/custom-devtools-formatter.js'
       ),
     },
-    modules: ['node_modules', path.resolve('public')],
+    modules: [
+      // default value
+      'node_modules',
+
+      // required for grafana enterprise resolution
+      path.resolve('node_modules'),
+
+      // required to for 'bare' imports (like 'app/core/utils' etc)
+      path.resolve('public'),
+    ],
     fallback: {
       buffer: false,
       fs: false,
@@ -42,13 +51,14 @@ module.exports = {
       https: false,
       string_decoder: false,
     },
-    symlinks: false,
   },
-  ignoreWarnings: [/export .* was not found in/],
-  stats: {
-    children: false,
-    source: false,
-  },
+  ignoreWarnings: [
+    /export .* was not found in/,
+    {
+      module: /@kusto\/language-service\/bridge\.min\.js$/,
+      message: /^Critical dependency: the request of a dependency is an expression$/,
+    },
+  ],
   plugins: [
     new webpack.NormalModuleReplacementPlugin(/^@grafana\/schema\/dist\/esm\/(.*)$/, (resource) => {
       resource.request = resource.request.replace('@grafana/schema/dist/esm', '@grafana/schema/src');
@@ -56,25 +66,6 @@ module.exports = {
     new CorsWorkerPlugin(),
     new webpack.ProvidePlugin({
       Buffer: ['buffer', 'Buffer'],
-    }),
-    new CopyWebpackPlugin({
-      patterns: [
-        {
-          context: path.join(require.resolve('monaco-editor/package.json'), '../min/vs/'),
-          from: '**/*',
-          to: '../lib/monaco/min/vs/', // inside the public/build folder
-          globOptions: {
-            ignore: [
-              '**/*.map', // debug files
-            ],
-          },
-        },
-        {
-          context: path.join(require.resolve('@kusto/monaco-kusto/package.json'), '../release/min'),
-          from: '**/*',
-          to: '../lib/monaco/min/vs/language/kusto/',
-        },
-      ],
     }),
   ],
   module: {
@@ -106,18 +97,21 @@ module.exports = {
         ],
       },
       {
-        test: /\.css$/,
-        use: ['style-loader', 'css-loader'],
-      },
-      {
         test: /\.(svg|ico|jpg|jpeg|png|gif|eot|otf|webp|ttf|woff|woff2|cur|ani|pdf)(\?.*)?$/,
         type: 'asset/resource',
         generator: { filename: 'static/img/[name].[hash:8][ext]' },
       },
       // for pre-caching SVGs as part of the JS bundles
       {
-        test: /(unicons|mono|custom)[\\/].*\.svg$/,
+        test: /(unicons|mono|custom|solid)[\\/].*\.svg$/,
         type: 'asset/source',
+      },
+      {
+        // Required for msagl library (used in Nodegraph panel) to work
+        test: /\.m?js$/,
+        resolve: {
+          fullySpecified: false,
+        },
       },
     ],
   },

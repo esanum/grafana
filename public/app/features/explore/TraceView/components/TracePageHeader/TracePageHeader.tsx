@@ -14,7 +14,8 @@
 
 import { css } from '@emotion/css';
 import cx from 'classnames';
-import React, { memo, useEffect, useMemo } from 'react';
+import { memo, useEffect, useMemo } from 'react';
+import * as React from 'react';
 
 import { CoreApp, DataFrame, dateTimeFormat, GrafanaTheme2 } from '@grafana/data';
 import { TimeZone } from '@grafana/schema';
@@ -42,6 +43,8 @@ export type TracePageHeaderProps = {
   setShowSpanFilters: (isOpen: boolean) => void;
   showSpanFilterMatchesOnly: boolean;
   setShowSpanFilterMatchesOnly: (showMatchesOnly: boolean) => void;
+  showCriticalPathSpansOnly: boolean;
+  setShowCriticalPathSpansOnly: (showCriticalPathSpansOnly: boolean) => void;
   setFocusedSpanIdForSearch: React.Dispatch<React.SetStateAction<string>>;
   spanFilterMatches: Set<string> | undefined;
   datasourceType: string;
@@ -60,6 +63,8 @@ export const TracePageHeader = memo((props: TracePageHeaderProps) => {
     setShowSpanFilters,
     showSpanFilterMatchesOnly,
     setShowSpanFilterMatchesOnly,
+    showCriticalPathSpansOnly,
+    setShowCriticalPathSpansOnly,
     setFocusedSpanIdForSearch,
     spanFilterMatches,
     datasourceType,
@@ -113,6 +118,15 @@ export const TracePageHeader = memo((props: TracePageHeaderProps) => {
     }
   }
 
+  const urlTooltip = (url: string) => {
+    return (
+      <>
+        <div>http.url or http.target or http.path</div>
+        <div>({url})</div>
+      </>
+    );
+  };
+
   return (
     <header className={styles.header}>
       <div className={styles.titleRow}>
@@ -124,6 +138,13 @@ export const TracePageHeader = memo((props: TracePageHeaderProps) => {
       <div className={styles.subtitle}>
         <span className={styles.timestamp}>{timestamp(trace, timeZone)}</span>
         <span className={styles.tagMeta}>
+          {data.meta?.custom?.partial && (
+            <Tooltip content={data.meta?.custom?.message} interactive={true}>
+              <span className={styles.tag}>
+                <Badge icon={'info-circle'} text={'Partial trace'} color={'orange'} />
+              </span>
+            </Tooltip>
+          )}
           {method && method.length > 0 && (
             <Tooltip content={'http.method'} interactive={true}>
               <span className={styles.tag}>
@@ -139,7 +160,7 @@ export const TracePageHeader = memo((props: TracePageHeaderProps) => {
             </Tooltip>
           )}
           {url && url.length > 0 && (
-            <Tooltip content={'http.url or http.target or http.path'} interactive={true}>
+            <Tooltip content={urlTooltip(url[0].value)} interactive={true}>
               <span className={styles.url}>{url[0].value}</span>
             </Tooltip>
           )}
@@ -152,6 +173,8 @@ export const TracePageHeader = memo((props: TracePageHeaderProps) => {
         setShowSpanFilters={setShowSpanFilters}
         showSpanFilterMatchesOnly={showSpanFilterMatchesOnly}
         setShowSpanFilterMatchesOnly={setShowSpanFilterMatchesOnly}
+        showCriticalPathSpansOnly={showCriticalPathSpansOnly}
+        setShowCriticalPathSpansOnly={setShowCriticalPathSpansOnly}
         search={search}
         setSearch={setSearch}
         spanFilterMatches={spanFilterMatches}
@@ -166,87 +189,92 @@ TracePageHeader.displayName = 'TracePageHeader';
 
 const getNewStyles = (theme: GrafanaTheme2) => {
   return {
-    TracePageHeaderBack: css`
-      label: TracePageHeaderBack;
-      align-items: center;
-      align-self: stretch;
-      background-color: #fafafa;
-      border-bottom: 1px solid #ddd;
-      border-right: 1px solid #ddd;
-      color: inherit;
-      display: flex;
-      font-size: 1.4rem;
-      padding: 0 1rem;
-      margin-bottom: -1px;
-      &:hover {
-        background-color: #f0f0f0;
-        border-color: #ccc;
-      }
-    `,
+    TracePageHeaderBack: css({
+      label: 'TracePageHeaderBack',
+      alignItems: 'center',
+      alignSelf: 'stretch',
+      backgroundColor: '#fafafa',
+      borderBottom: '1px solid #ddd',
+      borderRight: '1px solid #ddd',
+      color: 'inherit',
+      display: 'flex',
+      fontSize: '1.4rem',
+      padding: '0 1rem',
+      marginBottom: '-1px',
+      '&:hover': {
+        backgroundColor: '#f0f0f0',
+        borderColor: '#ccc',
+      },
+    }),
     TracePageHeaderOverviewItemValueDetail: cx(
-      css`
-        label: TracePageHeaderOverviewItemValueDetail;
-        color: #aaa;
-      `,
+      css({
+        label: 'TracePageHeaderOverviewItemValueDetail',
+        color: '#aaa',
+      }),
       'trace-item-value-detail'
     ),
-    TracePageHeaderOverviewItemValue: css`
-      label: TracePageHeaderOverviewItemValue;
-      &:hover > .trace-item-value-detail {
-        color: unset;
-      }
-    `,
-    header: css`
-      label: TracePageHeader;
-      background-color: ${theme.colors.background.primary};
-      padding: 0.5em 0 0 0;
-      position: sticky;
-      top: 0;
-      z-index: 5;
-    `,
-    titleRow: css`
-      align-items: flex-start;
-      display: flex;
-      padding: 0 8px;
-    `,
-    title: css`
-      color: inherit;
-      flex: 1;
-      font-size: 1.7em;
-      line-height: 1em;
-    `,
-    subtitle: css`
-      flex: 1;
-      line-height: 1em;
-      margin: -0.5em 0.5em 0.75em 0.5em;
-    `,
-    tag: css`
-      margin: 0 0.5em 0 0;
-    `,
-    duration: css`
-      color: #aaa;
-      margin: 0 0.75em;
-    `,
-    timestamp: css`
-      vertical-align: middle;
-    `,
-    tagMeta: css`
-      margin: 0 0.75em;
-      vertical-align: text-top;
-    `,
-    url: css`
-      margin: -2.5px 0.3em;
-      height: 15px;
-      overflow: hidden;
-      word-break: break-all;
-      line-height: 20px;
-    `,
-    TracePageHeaderTraceId: css`
-      label: TracePageHeaderTraceId;
-      white-space: nowrap;
-      text-overflow: ellipsis;
-      max-width: 30%;
-      display: inline-block;
-    `,
+    TracePageHeaderOverviewItemValue: css({
+      label: 'TracePageHeaderOverviewItemValue',
+      '&:hover > .trace-item-value-detail': {
+        color: 'unset',
+      },
+    }),
+    header: css({
+      label: 'TracePageHeader',
+      backgroundColor: theme.colors.background.primary,
+      padding: '0.5em 0 0 0',
+      position: 'sticky',
+      top: 0,
+      zIndex: 5,
+      textAlign: 'left',
+    }),
+    titleRow: css({
+      alignItems: 'flex-start',
+      display: 'flex',
+      padding: '0 8px',
+      flexWrap: 'wrap',
+    }),
+    title: css({
+      color: 'inherit',
+      flex: 1,
+      fontSize: '1.7em',
+      lineHeight: '1em',
+      marginBottom: 0,
+      minWidth: '200px',
+    }),
+    subtitle: css({
+      flex: 1,
+      lineHeight: '1em',
+      margin: '-0.5em 0.5em 0.75em 0.5em',
+    }),
+    tag: css({
+      margin: '0 0.5em 0 0',
+    }),
+    duration: css({
+      color: '#aaa',
+      margin: '0 0.75em',
+    }),
+    timestamp: css({
+      verticalAlign: 'middle',
+    }),
+    tagMeta: css({
+      margin: '0 0.75em',
+      verticalAlign: 'text-top',
+    }),
+    url: css({
+      margin: '-2.5px 0.3em',
+      height: '15px',
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      maxWidth: '700px',
+      display: 'inline-block',
+    }),
+    TracePageHeaderTraceId: css({
+      label: 'TracePageHeaderTraceId',
+      whiteSpace: 'nowrap',
+      textOverflow: 'ellipsis',
+      maxWidth: '30%',
+      display: 'inline-block',
+    }),
   };
 };

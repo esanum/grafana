@@ -1,10 +1,10 @@
 import { css } from '@emotion/css';
 import { isEqual } from 'lodash';
-import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { AbsoluteTimeRange, GrafanaTheme2, LogsSortOrder, TimeZone } from '@grafana/data';
-import { reportInteraction } from '@grafana/runtime';
-import { DataQuery } from '@grafana/schema';
+import { AbsoluteTimeRange, GrafanaTheme2, LogsSortOrder } from '@grafana/data';
+import { config, reportInteraction } from '@grafana/runtime';
+import { DataQuery, TimeZone } from '@grafana/schema';
 import { Button, Icon, Spinner, useTheme2 } from '@grafana/ui';
 import { TOP_BAR_LEVEL_HEIGHT } from 'app/core/components/AppChrome/types';
 
@@ -41,7 +41,6 @@ function LogsNavigation({
   addResultsToCache,
 }: Props) {
   const [pages, setPages] = useState<LogsPage[]>([]);
-  const [currentPageIndex, setCurrentPageIndex] = useState(0);
 
   // These refs are to determine, if we want to clear up logs navigation when totally new query is run
   const expectedQueriesRef = useRef<DataQuery[]>();
@@ -49,6 +48,14 @@ function LogsNavigation({
   // This ref is to store range span for future queres based on firstly selected time range
   // e.g. if last 5 min selected, always run 5 min range
   const rangeSpanRef = useRef(0);
+
+  const currentPageIndex = useMemo(
+    () =>
+      pages.findIndex((page) => {
+        return page.queryRange.to === absoluteRange.to;
+      }),
+    [absoluteRange.to, pages]
+  );
 
   const oldestLogsFirst = logsSortOrder === LogsSortOrder.Ascending;
   const onFirstPage = oldestLogsFirst ? currentPageIndex === pages.length - 1 : currentPageIndex === 0;
@@ -64,7 +71,6 @@ function LogsNavigation({
     if (!isEqual(expectedRangeRef.current, absoluteRange) || !isEqual(expectedQueriesRef.current, queries)) {
       clearCache();
       setPages([newPage]);
-      setCurrentPageIndex(0);
       expectedQueriesRef.current = queries;
       rangeSpanRef.current = absoluteRange.to - absoluteRange.from;
     } else {
@@ -73,30 +79,18 @@ function LogsNavigation({
         newPages = pages.filter((page) => !isEqual(newPage.queryRange, page.queryRange));
         // Sort pages based on logsOrder so they visually align with displayed logs
         newPages = [...newPages, newPage].sort((a, b) => sortPages(a, b, logsSortOrder));
-        // Set new pages
-
         return newPages;
       });
-
-      // Set current page index
-      const index = newPages.findIndex((page) => page.queryRange.to === absoluteRange.to);
-      setCurrentPageIndex(index);
     }
-    addResultsToCache();
   }, [visibleRange, absoluteRange, logsSortOrder, queries, clearCache, addResultsToCache]);
-
-  useEffect(() => {
-    clearCache();
-    // We can't enforce the eslint rule here because we only want to run when component is mounted.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const changeTime = useCallback(
     ({ from, to }: AbsoluteTimeRange) => {
+      addResultsToCache();
       expectedRangeRef.current = { from, to };
       onChangeTime({ from, to });
     },
-    [onChangeTime]
+    [onChangeTime, addResultsToCache]
   );
 
   const sortPages = (a: LogsPage, b: LogsPage, logsSortOrder?: LogsSortOrder | null) => {
@@ -173,29 +167,38 @@ function LogsNavigation({
         pageType: 'page',
         pageNumber,
       });
-      !loading && changeTime({ from: page.queryRange.from, to: page.queryRange.to });
+      changeTime({ from: page.queryRange.from, to: page.queryRange.to });
       scrollToTopLogs();
     },
-    [changeTime, loading, scrollToTopLogs]
+    [changeTime, scrollToTopLogs]
   );
+
+  const onScrollToTopClick = useCallback(() => {
+    reportInteraction('grafana_explore_logs_scroll_top_clicked');
+    scrollToTopLogs();
+  }, [scrollToTopLogs]);
 
   return (
     <div className={styles.navContainer}>
-      {oldestLogsFirst ? olderLogsButton : newerLogsButton}
-      <LogsNavigationPages
-        pages={pages}
-        currentPageIndex={currentPageIndex}
-        oldestLogsFirst={oldestLogsFirst}
-        timeZone={timeZone}
-        loading={loading}
-        onClick={onPageClick}
-      />
-      {oldestLogsFirst ? newerLogsButton : olderLogsButton}
+      {!config.featureToggles.logsInfiniteScrolling && (
+        <>
+          {oldestLogsFirst ? olderLogsButton : newerLogsButton}
+          <LogsNavigationPages
+            pages={pages}
+            currentPageIndex={currentPageIndex}
+            oldestLogsFirst={oldestLogsFirst}
+            timeZone={timeZone}
+            loading={loading}
+            onClick={onPageClick}
+          />
+          {oldestLogsFirst ? newerLogsButton : olderLogsButton}
+        </>
+      )}
       <Button
         data-testid="scrollToTop"
         className={styles.scrollToTopButton}
         variant="secondary"
-        onClick={scrollToTopLogs}
+        onClick={onScrollToTopClick}
         title="Scroll to top"
       >
         <Icon name="arrow-up" size="lg" />
@@ -209,41 +212,46 @@ export default memo(LogsNavigation);
 const getStyles = (theme: GrafanaTheme2, oldestLogsFirst: boolean) => {
   const navContainerHeight = `calc(100vh - 2*${theme.spacing(2)} - 2*${TOP_BAR_LEVEL_HEIGHT}px)`;
   return {
-    navContainer: css`
-      max-height: ${navContainerHeight};
-      display: flex;
-      flex-direction: column;
-      justify-content: ${oldestLogsFirst ? 'flex-start' : 'space-between'};
-      position: sticky;
-      top: ${theme.spacing(2)};
-      right: 0;
-    `,
-    navButton: css`
-      width: 58px;
-      height: 68px;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      line-height: 1;
-    `,
-    navButtonContent: css`
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      width: 100%;
-      height: 100%;
-      white-space: normal;
-    `,
-    scrollToTopButton: css`
-      width: 40px;
-      height: 40px;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      margin-top: ${theme.spacing(1)};
-    `,
+    navContainer: css({
+      maxHeight: navContainerHeight,
+      width: oldestLogsFirst ? '58px' : 'auto',
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: config.featureToggles.logsInfiniteScrolling
+        ? 'flex-end'
+        : oldestLogsFirst
+          ? 'flex-start'
+          : 'space-between',
+      position: 'sticky',
+      top: theme.spacing(2),
+      right: 0,
+    }),
+    navButton: css({
+      width: '58px',
+      height: '68px',
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'center',
+      alignItems: 'center',
+      lineHeight: 1,
+    }),
+    navButtonContent: css({
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'center',
+      alignItems: 'center',
+      width: '100%',
+      height: '100%',
+      whiteSpace: 'normal',
+    }),
+    scrollToTopButton: css({
+      width: '40px',
+      height: '40px',
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginTop: theme.spacing(1),
+    }),
   };
 };

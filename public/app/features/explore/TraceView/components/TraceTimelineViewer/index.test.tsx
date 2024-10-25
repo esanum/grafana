@@ -14,7 +14,6 @@
 
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import React from 'react';
 
 import { createTheme } from '@grafana/data';
 
@@ -49,7 +48,6 @@ describe('<TraceTimelineViewer>', () => {
     expandAll: jest.fn(),
     collapseAll: jest.fn(),
     expandOne: jest.fn(),
-    registerAccessors: jest.fn(),
     collapseOne: jest.fn(),
     theme: createTheme(),
     history: {

@@ -15,6 +15,12 @@ labels:
 menuTitle: Dashboard overview
 title: Grafana dashboards overview
 weight: 390
+refs:
+  transform-data:
+    - pattern: /docs/grafana/
+      destination: /docs/grafana/<GRAFANA_VERSION>/panels-visualizations/query-transform-data/transform-data/
+    - pattern: /docs/grafana-cloud/
+      destination: /docs/grafana/<GRAFANA_VERSION>/panels-visualizations/query-transform-data/transform-data/
 ---
 
 # Grafana dashboards overview
@@ -39,11 +45,11 @@ It can be difficult to understand the distinctions between different data source
 
 ## Plugins
 
-A Grafana plugin is software that adds new capabilities to Grafana. They come in many types, but right now we'll address _data source plugins_. The job of a Grafana data source plugin is to take a query you want answered, retrieve the data from the data source, and reconcile the differences between the data model of the data source and the data model of Grafana dashboards. It does this using a unified data structure called a [data frame][data-frames].
+A Grafana plugin is software that adds new capabilities to Grafana. They come in many types, but right now we'll address _data source plugins_. The job of a Grafana data source plugin is to take a query you want answered, retrieve the data from the data source, and reconcile the differences between the data model of the data source and the data model of Grafana dashboards. It does this using a unified data structure called a [data frame](https://grafana.com/developers/plugin-tools/key-concepts/data-frames).
 
 The data coming into the plugin from the data source might be in many different formats (such as JSON, rows and columns, or CSV), but when it leaves the plugin and moves through the rest of the gates toward a visualization, it's always in data frames.
 
-Currently, Grafana offers a diverse range of 155 data sources that you can use. The most commonly used options are already pre-installed and accessible. Before exploring other options, look for an existing data source that matches your requirements. Grafana constantly updates the list, but if you don't find a suitable data source, you can browse through the [plugin catalog](/grafana/plugins/?type=datasource) or [create a plugin]({{< relref "../../developers/plugins/create-a-grafana-plugin" >}}).
+Currently, Grafana offers a diverse range of 155 data sources that you can use. The most commonly used options are already pre-installed and accessible. Before exploring other options, look for an existing data source that matches your requirements. Grafana constantly updates the list, but if you don't find a suitable data source, you can browse through the [plugin catalog](/grafana/plugins/?type=datasource) or [create a plugin](/developers/plugin-tools).
 
 ## Queries
 
@@ -57,7 +63,7 @@ The following image shows the Query Editor associated with the Prometheus data s
 
 ## Transformations
 
-When the data format in a visualization doesn’t meet your requirements, you can apply a [transformation][transform-data] that manipulates the data returned by a query.
+When the data format in a visualization doesn’t meet your requirements, you can apply a [transformation](ref:transform-data) that manipulates the data returned by a query.
 You might not need to transform data when you're first starting out, but they're powerful and worth mentioning.
 
 Transforming data is useful in the following kinds of situations:
@@ -93,11 +99,3 @@ Building a Grafana dashboard is a process that starts with determining your dash
 And with the data source identified and the plugin installed, you can write your query, transform the data, and format the visualization to meet your needs.
 
 This component architecture is part of what makes Grafana so powerful and general. Given the data source plugin and data frame abstraction, any data source you can access can work with the same general approach.
-
-{{% docs/reference %}}
-[data-frames]: "/docs/grafana/ -> /docs/grafana/<GRAFANA VERSION>/developers/plugins/introduction-to-plugin-development/data-frames"
-[data-frames]: "/docs/grafana-cloud/ -> /docs/grafana/<GRAFANA VERSION>/developers/plugins/introduction-to-plugin-development/data-frames"
-
-[transform-data]: "/docs/grafana/ -> /docs/grafana/<GRAFANA VERSION>/panels-visualizations/query-transform-data/transform-data"
-[transform-data]: "/docs/grafana-cloud/ -> /docs/grafana/<GRAFANA VERSION>/panels-visualizations/query-transform-data/transform-data"
-{{% /docs/reference %}}

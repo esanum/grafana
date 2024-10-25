@@ -43,8 +43,8 @@ func ProvideService(cfg *setting.Cfg, sqlStore db.DB, usageStats usagestats.Serv
 	return s, nil
 }
 
-func (ds *RemoteCache) getUsageStats(ctx context.Context) (map[string]interface{}, error) {
-	stats := map[string]interface{}{}
+func (ds *RemoteCache) getUsageStats(ctx context.Context) (map[string]any, error) {
+	stats := map[string]any{}
 	stats["stats.remote_cache."+ds.Cfg.RemoteCacheOptions.Name+".count"] = 1
 	encryptVal := 0
 	if ds.Cfg.RemoteCacheOptions.Encryption {
@@ -69,11 +69,6 @@ type CacheStorage interface {
 
 	// Delete object from cache
 	Delete(ctx context.Context, key string) error
-
-	// Count returns the number of items in the cache.
-	// Optionaly a prefix can be provided to only count items with that prefix
-	// DO NOT USE. Not available for memcached.
-	Count(ctx context.Context, prefix string) (int64, error)
 }
 
 // RemoteCache allows Grafana to cache data outside its own process
@@ -100,11 +95,6 @@ func (ds *RemoteCache) Set(ctx context.Context, key string, value []byte, expire
 // Delete object from cache
 func (ds *RemoteCache) Delete(ctx context.Context, key string) error {
 	return ds.client.Delete(ctx, key)
-}
-
-// Count returns the number of items in the cache.
-func (ds *RemoteCache) Count(ctx context.Context, prefix string) (int64, error) {
-	return ds.client.Count(ctx, prefix)
 }
 
 // Run starts the backend processes for cache clients.
@@ -173,10 +163,6 @@ func (pcs *encryptedCacheStorage) Delete(ctx context.Context, key string) error 
 	return pcs.cache.Delete(ctx, key)
 }
 
-func (pcs *encryptedCacheStorage) Count(ctx context.Context, prefix string) (int64, error) {
-	return pcs.cache.Count(ctx, prefix)
-}
-
 type prefixCacheStorage struct {
 	cache  CacheStorage
 	prefix string
@@ -190,8 +176,4 @@ func (pcs *prefixCacheStorage) Set(ctx context.Context, key string, value []byte
 }
 func (pcs *prefixCacheStorage) Delete(ctx context.Context, key string) error {
 	return pcs.cache.Delete(ctx, pcs.prefix+key)
-}
-
-func (pcs *prefixCacheStorage) Count(ctx context.Context, prefix string) (int64, error) {
-	return pcs.cache.Count(ctx, pcs.prefix+prefix)
 }

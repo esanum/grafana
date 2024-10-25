@@ -1,7 +1,5 @@
 import { StoryFn, Meta } from '@storybook/react';
-import React, { useState, ChangeEvent } from 'react';
-
-import { withCenteredStory } from '../../utils/storybook/withCenteredStory';
+import { useState, ChangeEvent } from 'react';
 
 import { SecretInput } from './SecretInput';
 import mdx from './SecretInput.mdx';
@@ -9,7 +7,6 @@ import mdx from './SecretInput.mdx';
 const meta: Meta<typeof SecretInput> = {
   title: 'Forms/SecretInput',
   component: SecretInput,
-  decorators: [withCenteredStory],
   parameters: {
     docs: {
       page: mdx,

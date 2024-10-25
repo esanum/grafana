@@ -10,19 +10,11 @@ import (
 	"github.com/grafana/grafana/pkg/plugins/backendplugin"
 )
 
-// Store is the publicly accessible storage for plugins.
-type Store interface {
-	// Plugin finds a plugin by its ID.
-	Plugin(ctx context.Context, pluginID string) (PluginDTO, bool)
-	// Plugins returns plugins by their requested type.
-	Plugins(ctx context.Context, pluginTypes ...Type) []PluginDTO
-}
-
 type Installer interface {
 	// Add adds a new plugin.
 	Add(ctx context.Context, pluginID, version string, opts CompatOpts) error
 	// Remove removes an existing plugin.
-	Remove(ctx context.Context, pluginID string) error
+	Remove(ctx context.Context, pluginID, version string) error
 }
 
 type PluginSource interface {
@@ -33,7 +25,7 @@ type PluginSource interface {
 
 type FileStore interface {
 	// File retrieves a plugin file.
-	File(ctx context.Context, pluginID, filename string) (*File, error)
+	File(ctx context.Context, pluginID, pluginVersion, filename string) (*File, error)
 }
 
 type File struct {
@@ -77,6 +69,7 @@ type FS interface {
 
 	Base() string
 	Files() ([]string, error)
+	Rel(string) (string, error)
 }
 
 type FSRemover interface {
@@ -95,21 +88,12 @@ type FoundPlugin struct {
 
 // Client is used to communicate with backend plugin implementations.
 type Client interface {
-	backend.QueryDataHandler
-	backend.CheckHealthHandler
-	backend.StreamHandler
-	backend.CallResourceHandler
-	backend.CollectMetricsHandler
+	backend.Handler
 }
 
 // BackendFactoryProvider provides a backend factory for a provided plugin.
 type BackendFactoryProvider interface {
 	BackendFactory(ctx context.Context, p *Plugin) backendplugin.PluginFactoryFunc
-}
-
-type RendererManager interface {
-	// Renderer returns a renderer plugin.
-	Renderer(ctx context.Context) *Plugin
 }
 
 type SecretsPluginManager interface {
@@ -118,11 +102,12 @@ type SecretsPluginManager interface {
 }
 
 type StaticRouteResolver interface {
-	Routes() []*StaticRoute
+	Routes(ctx context.Context) []*StaticRoute
 }
 
 type ErrorResolver interface {
-	PluginErrors() []*Error
+	PluginErrors(ctx context.Context) []*Error
+	PluginError(ctx context.Context, pluginID string) *Error
 }
 
 type PluginLoaderAuthorizer interface {
@@ -140,42 +125,16 @@ type Licensing interface {
 	AppURL() string
 }
 
-// RoleRegistry handles the plugin RBAC roles and their assignments
-type RoleRegistry interface {
-	DeclarePluginRoles(ctx context.Context, ID, name string, registrations []RoleRegistration) error
-}
-
-// ClientMiddleware is an interface representing the ability to create a middleware
-// that implements the Client interface.
-type ClientMiddleware interface {
-	// CreateClientMiddleware creates a new client middleware.
-	CreateClientMiddleware(next Client) Client
-}
-
-// The ClientMiddlewareFunc type is an adapter to allow the use of ordinary
-// functions as ClientMiddleware's. If f is a function with the appropriate
-// signature, ClientMiddlewareFunc(f) is a ClientMiddleware that calls f.
-type ClientMiddlewareFunc func(next Client) Client
-
-// CreateClientMiddleware implements the ClientMiddleware interface.
-func (fn ClientMiddlewareFunc) CreateClientMiddleware(next Client) Client {
-	return fn(next)
-}
-
-type FeatureToggles interface {
-	IsEnabled(flag string) bool
-}
-
 type SignatureCalculator interface {
 	Calculate(ctx context.Context, src PluginSource, plugin FoundPlugin) (Signature, error)
 }
 
 type KeyStore interface {
 	Get(ctx context.Context, key string) (string, bool, error)
-	Set(ctx context.Context, key string, value string) error
-	Del(ctx context.Context, key string) error
+	Set(ctx context.Context, key string, value any) error
+	Delete(ctx context.Context, key string) error
 	ListKeys(ctx context.Context) ([]string, error)
-	GetLastUpdated(ctx context.Context) (*time.Time, error)
+	GetLastUpdated(ctx context.Context) (time.Time, error)
 	SetLastUpdated(ctx context.Context) error
 }
 

@@ -19,10 +19,14 @@ weight: 800
 
 Auditing allows you to track important changes to your Grafana instance. By default, audit logs are logged to file but the auditing feature also supports sending logs directly to Loki.
 
+{{% admonition type="note" %}}
+To enable sending Grafana Cloud audit logs to your Grafana Cloud Logs instance, please [file a support ticket](/profile/org/tickets/new). Note that standard ingest and retention rates apply for ingesting these audit logs.
+{{% /admonition %}}
+
 Only API requests or UI actions that trigger an API request generate an audit log.
 
 {{% admonition type="note" %}}
-Available in [Grafana Enterprise]({{< relref "../../introduction/grafana-enterprise" >}}) version 7.3 and later, and [Grafana Cloud](/docs/grafana-cloud).
+Available in [Grafana Enterprise]({{< relref "../../introduction/grafana-enterprise" >}}) and [Grafana Cloud](/docs/grafana-cloud).
 {{% /admonition %}}
 
 ## Audit logs
@@ -44,7 +48,7 @@ Audit logs contain the following fields. The fields followed by **\*** are alway
 | `user.orgId`\*          | number  | Current organization of the user that made the request.                                                                                                                                                                  |
 | `user.orgRole`          | string  | Current role of the user that made the request.                                                                                                                                                                          |
 | `user.name`             | string  | Name of the Grafana user that made the request.                                                                                                                                                                          |
-| `user.tokenId`          | number  | ID of the user authentication token.                                                                                                                                                                                     |
+| `user.authTokenId`      | number  | ID of the user authentication token.                                                                                                                                                                                     |
 | `user.apiKeyId`         | number  | ID of the Grafana API key used to make the request.                                                                                                                                                                      |
 | `user.isAnonymous`\*    | boolean | If an anonymous user made the request, `true`. Otherwise, `false`.                                                                                                                                                       |
 | `action`\*              | string  | The request action. For example, `create`, `update`, or `manage-permissions`.                                                                                                                                            |
@@ -265,40 +269,11 @@ external group.
 
 \* `resources` may also contain a third item with `"type":` set to `"user"` or `"team"`.
 
-#### Alerts and notification channels management
+#### Data source query
 
-| Action                                                                | Distinguishing fields                                                                          |
-| --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| Save alert manager configuration                                      | `{"action": "update", "requestUri": "/api/alertmanager/RECIPIENT/config/api/v1/alerts"}`       |
-| Reset alert manager configuration                                     | `{"action": "delete", "requestUri": "/api/alertmanager/RECIPIENT/config/api/v1/alerts"}`       |
-| Create silence                                                        | `{"action": "create", "requestUri": "/api/alertmanager/RECIPIENT/api/v2/silences"}`            |
-| Delete silence                                                        | `{"action": "delete", "requestUri": "/api/alertmanager/RECIPIENT/api/v2/silences/SILENCE-ID"}` |
-| Create alert                                                          | `{"action": "create", "requestUri": "/api/ruler/RECIPIENT/api/v2/alerts"}`                     |
-| Create or update rule group                                           | `{"action": "create-update", "requestUri": "/api/ruler/RECIPIENT/api/v1/rules/NAMESPACE"}`     |
-| Delete rule group                                                     | `{"action": "delete", "requestUri": "/api/ruler/RECIPIENT/api/v1/rules/NAMESPACE/GROUP-NAME"}` |
-| Delete namespace                                                      | `{"action": "delete", "requestUri": "/api/ruler/RECIPIENT/api/v1/rules/NAMESPACE"}`            |
-| Test Grafana managed receivers                                        | `{"action": "test", "requestUri": "/api/alertmanager/RECIPIENT/config/api/v1/receivers/test"}` |
-| Create or update the NGalert configuration of the user's organization | `{"action": "create-update", "requestUri": "/api/v1/ngalert/admin_config"}`                    |
-| Delete the NGalert configuration of the user's organization           | `{"action": "delete", "requestUri": "/api/v1/ngalert/admin_config"}`                           |
-
-Where the following:
-
-- `RECIPIENT` is `grafana` for requests handled by Grafana or the data source UID for requests forwarded to a data source.
-- `NAMESPACE` is the string identifier for the rules namespace.
-- `GROUP-NAME` is the string identifier for the rules group.
-- `SILENCE-ID` is the ID of the affected silence.
-
-The following legacy alerting actions are still supported:
-
-| Action                            | Distinguishing fields                                                 |
-| --------------------------------- | --------------------------------------------------------------------- |
-| Test alert rule                   | `{"action": "test", "resources": [{"type": "panel"}]}`                |
-| Pause alert                       | `{"action": "pause", "resources": [{"type": "alert"}]}`               |
-| Pause all alerts                  | `{"action": "pause-all"}`                                             |
-| Test alert notification channel   | `{"action": "test", "resources": [{"type": "alert-notification"}]}`   |
-| Create alert notification channel | `{"action": "create", "resources": [{"type": "alert-notification"}]}` |
-| Update alert notification channel | `{"action": "update", "resources": [{"type": "alert-notification"}]}` |
-| Delete alert notification channel | `{"action": "delete", "resources": [{"type": "alert-notification"}]}` |
+| Action           | Distinguishing fields                                        |
+| ---------------- | ------------------------------------------------------------ |
+| Query datasource | `{"action": "query", "resources": [{"type": "datasource"}]}` |
 
 #### Reporting
 
@@ -334,7 +309,6 @@ The following legacy alerting actions are still supported:
 | Reload provisioned dashboards     | `{"action": "provisioning-dashboards"}`    |
 | Reload provisioned datasources    | `{"action": "provisioning-datasources"}`   |
 | Reload provisioned plugins        | `{"action": "provisioning-plugins"}`       |
-| Reload provisioned notifications  | `{"action": "provisioning-notifications"}` |
 | Reload provisioned alerts         | `{"action": "provisioning-alerts"}`        |
 | Reload provisioned access control | `{"action": "provisioning-accesscontrol"}` |
 
@@ -361,7 +335,7 @@ Furthermore, you can also record `GET` requests. See below how to configure it.
 
 | Action         | Distinguishing fields          |
 | -------------- | ------------------------------ |
-| POST request   | `{"action": "action"}`         |
+| POST request   | `{"action": "post-action"}`    |
 | PATCH request  | `{"action": "partial-update"}` |
 | PUT request    | `{"action": "update"}`         |
 | DELETE request | `{"action": "delete"}`         |
@@ -426,7 +400,7 @@ The HTTP option for the Loki exporter is available only in Grafana Enterprise ve
 [auditing.logs.loki]
 # Set the communication protocol to use with Loki (can be grpc or http)
 type = grpc
-# Set the address for writing logs to Loki (format must be host:port)
+# Set the address for writing logs to Loki
 url = localhost:9095
 # Defaults to true. If true, it establishes a secure connection to Loki
 tls = true
@@ -440,6 +414,15 @@ If you have multiple Grafana instances sending logs to the same Loki service or 
 - **host** - OS hostname on which the Grafana instance is running.
 - **grafana_instance** - Application URL.
 - **kind** - `auditing`
+
+When basic authentication is needed to ingest logs in your Loki instance, you can specify credentials in the URL field. For example:
+
+```ini
+# Set the communication protocol to use with Loki (can be grpc or http)
+type = http
+# Set the address for writing logs to Loki
+url = user:password@localhost:3000
+```
 
 ### Console exporter
 

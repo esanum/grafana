@@ -1,5 +1,5 @@
 import { css } from '@emotion/css';
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 
 import { GrafanaTheme2 } from '@grafana/data';
 import { getDataSourceSrv } from '@grafana/runtime';
@@ -27,19 +27,16 @@ export function RuleDetailsDataSources(props: Props): JSX.Element | null {
 
     if (isGrafanaRulerRule(rule.rulerRule)) {
       const { data } = rule.rulerRule.grafana_alert;
-      const unique = data.reduce(
-        (dataSources, query) => {
-          const ds = getDataSourceSrv().getInstanceSettings(query.datasourceUid);
+      const unique = data.reduce<Record<string, { name: string; icon?: string }>>((dataSources, query) => {
+        const ds = getDataSourceSrv().getInstanceSettings(query.datasourceUid);
 
-          if (!ds || ds.uid === ExpressionDatasourceUID) {
-            return dataSources;
-          }
-
-          dataSources[ds.name] = { name: ds.name, icon: ds.meta.info.logos.small };
+        if (!ds || ds.uid === ExpressionDatasourceUID) {
           return dataSources;
-        },
-        {} as Record<string, { name: string; icon?: string }>
-      );
+        }
+
+        dataSources[ds.name] = { name: ds.name, icon: ds.meta.info.logos.small };
+        return dataSources;
+      }, {});
 
       return Object.values(unique);
     }
@@ -71,9 +68,9 @@ function getStyles(theme: GrafanaTheme2) {
   const size = theme.spacing(2);
 
   return {
-    dataSourceIcon: css`
-      width: ${size};
-      height: ${size};
-    `,
+    dataSourceIcon: css({
+      width: size,
+      height: size,
+    }),
   };
 }

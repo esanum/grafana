@@ -1,19 +1,17 @@
-import { render } from '@testing-library/react';
-import React from 'react';
-import { Route } from 'react-router-dom';
-import { byRole, byTestId } from 'testing-library-selector';
+import { Routes, Route } from 'react-router-dom-v5-compat';
+import { render } from 'test/test-utils';
+import { byRole, byTestId, byText } from 'testing-library-selector';
 
 import { selectors } from '@grafana/e2e-selectors';
-import { locationService } from '@grafana/runtime';
+import { AppNotificationList } from 'app/core/components/AppNotifications/AppNotificationList';
 import RuleEditor from 'app/features/alerting/unified/RuleEditor';
 
-import { TestProvider } from './TestProvider';
-
 export const ui = {
+  loadingIndicator: byText('Loading rule...'),
   inputs: {
-    name: byRole('textbox', { name: /rule name name for the alert rule\./i }),
+    name: byRole('textbox', { name: 'name' }),
     alertType: byTestId('alert-type-picker'),
-    dataSource: byTestId('datasource-picker'),
+    dataSource: byTestId(selectors.components.DataSourcePicker.inputV2),
     folder: byTestId('folder-picker'),
     folderContainer: byTestId(selectors.components.FolderPicker.containerV2),
     namespace: byTestId('namespace-picker'),
@@ -23,8 +21,14 @@ export const ui = {
     labelKey: (idx: number) => byTestId(`label-key-${idx}`),
     labelValue: (idx: number) => byTestId(`label-value-${idx}`),
     expr: byTestId('expr'),
+    simplifiedRouting: {
+      contactPointRouting: byRole('radio', { name: /select contact point/i }),
+      contactPoint: byTestId('contact-point-picker'),
+      routingOptions: byText(/muting, grouping and timings \(optional\)/i),
+    },
   },
   buttons: {
+    saveAndExit: byRole('button', { name: 'Save rule and exit' }),
     save: byRole('button', { name: 'Save rule' }),
     addAnnotation: byRole('button', { name: /Add info/ }),
     addLabel: byRole('button', { name: /Add label/ }),
@@ -32,15 +36,20 @@ export const ui = {
 };
 
 export function renderRuleEditor(identifier?: string, recording = false) {
-  if (identifier) {
-    locationService.push(`/alerting/${identifier}/edit`);
-  } else {
-    locationService.push(`/alerting/new/${recording ? 'recording' : 'alerting'}`);
-  }
-
   return render(
-    <TestProvider>
-      <Route path={['/alerting/new/:type', '/alerting/:id/edit']} component={RuleEditor} />
-    </TestProvider>
+    <>
+      <AppNotificationList />
+      <Routes>
+        <Route path={'/alerting/new/:type'} element={<RuleEditor />} />
+        <Route path={'/alerting/:id/edit'} element={<RuleEditor />} />
+      </Routes>
+    </>,
+    {
+      historyOptions: {
+        initialEntries: [
+          identifier ? `/alerting/${identifier}/edit` : `/alerting/new/${recording ? 'recording' : 'alerting'}`,
+        ],
+      },
+    }
   );
 }

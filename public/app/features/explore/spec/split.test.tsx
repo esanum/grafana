@@ -1,24 +1,22 @@
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import React, { ComponentProps } from 'react';
+import { ComponentProps } from 'react';
 import AutoSizer from 'react-virtualized-auto-sizer';
 
-import { serializeStateToUrlParam } from '@grafana/data';
+import { EventBusSrv, serializeStateToUrlParam } from '@grafana/data';
 
 import * as mainState from '../state/main';
 
 import { makeLogsQueryResponse } from './helper/query';
-import { setupExplore, waitForExplore } from './helper/setup';
+import { setupExplore, tearDown, waitForExplore } from './helper/setup';
+
+const testEventBus = new EventBusSrv();
 
 jest.mock('app/core/core', () => {
   return {
     contextSrv: {
       hasPermission: () => true,
-      hasAccess: () => true,
-    },
-    appEvents: {
-      subscribe: () => {},
-      publish: () => {},
+      getValidIntervals: (defaultIntervals: string[]) => defaultIntervals,
     },
   };
 });
@@ -27,26 +25,34 @@ jest.mock('react-virtualized-auto-sizer', () => {
   return {
     __esModule: true,
     default(props: ComponentProps<typeof AutoSizer>) {
-      return <div>{props.children({ width: 1000, height: 1000 })}</div>;
+      return (
+        <div>
+          {props.children({
+            width: 1000,
+            scaledWidth: 1000,
+            scaledHeight: 1000,
+            height: 1000,
+          })}
+        </div>
+      );
     },
   };
 });
 
-const fetch = jest.fn().mockResolvedValue({ correlations: [] });
 jest.mock('@grafana/runtime', () => ({
   ...jest.requireActual('@grafana/runtime'),
-  getBackendSrv: () => ({ fetch }),
+  getAppEvents: () => testEventBus,
 }));
 
-jest.mock('rxjs', () => ({
-  ...jest.requireActual('rxjs'),
-  lastValueFrom: () =>
-    new Promise((resolve, reject) => {
-      resolve({ data: { correlations: [] } });
-    }),
+jest.mock('../hooks/useExplorePageTitle', () => ({
+  useExplorePageTitle: jest.fn(),
 }));
 
 describe('Handles open/close splits and related events in UI and URL', () => {
+  afterEach(() => {
+    tearDown();
+  });
+
   it('opens the split pane when split button is clicked', async () => {
     const { location } = setupExplore();
 

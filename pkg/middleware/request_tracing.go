@@ -9,9 +9,9 @@ import (
 	"strings"
 
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/propagation"
+	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/grafana/grafana/pkg/infra/tracing"
@@ -74,32 +74,43 @@ func RouteOperationName(req *http.Request) (string, bool) {
 func RequestTracing(tracer tracing.Tracer) web.Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			if strings.HasPrefix(req.URL.Path, "/public/") || req.URL.Path == "/robots.txt" || req.URL.Path == "/favicon.ico" {
+			// skip tracing for a few endpoints
+			if strings.HasPrefix(req.URL.Path, "/public/") ||
+				req.URL.Path == "/robots.txt" ||
+				req.URL.Path == "/favicon.ico" {
 				next.ServeHTTP(w, req)
 				return
 			}
 
-			rw := web.Rw(w, req)
+			// Extract the parent span context from the incoming request.
+			ctx := otel.GetTextMapPropagator().Extract(req.Context(), propagation.HeaderCarrier(req.Header))
 
-			wireContext := otel.GetTextMapPropagator().Extract(req.Context(), propagation.HeaderCarrier(req.Header))
-			ctx, span := tracer.Start(wireContext, fmt.Sprintf("HTTP %s %s", req.Method, req.URL.Path), trace.WithLinks(trace.LinkFromContext(wireContext)))
+			// generic span name for requests where there's no route operation name
+			spanName := fmt.Sprintf("HTTP %s <unknown>", req.Method)
+
+			ctx, span := tracer.Start(ctx, spanName, trace.WithAttributes(
+				semconv.HTTPURLKey.String(req.RequestURI),
+				semconv.HTTPMethodKey.String(req.Method),
+			), trace.WithSpanKind(trace.SpanKindServer))
+			defer span.End()
 
 			req = req.WithContext(ctx)
-			next.ServeHTTP(w, req)
 
-			// Only call span.Finish when a route operation name have been set,
-			// meaning that not set the span would not be reported.
+			// Ensure the response writer's status can be captured.
+			rw := web.Rw(w, req)
+
+			next.ServeHTTP(rw, req)
+
+			// Reset the span name after the request has been processed, as
+			// the route operation may have been injected by middleware.
 			// TODO: do not depend on web.Context from the future
 			if routeOperation, exists := RouteOperationName(web.FromContext(req.Context()).Req); exists {
-				defer span.End()
 				span.SetName(fmt.Sprintf("HTTP %s %s", req.Method, routeOperation))
 			}
 
 			status := rw.Status()
 
-			span.SetAttributes("http.status_code", status, attribute.Int("http.status_code", status))
-			span.SetAttributes("http.url", req.RequestURI, attribute.String("http.url", req.RequestURI))
-			span.SetAttributes("http.method", req.Method, attribute.String("http.method", req.Method))
+			span.SetAttributes(semconv.HTTPStatusCode(status))
 			if status >= 400 {
 				span.SetStatus(codes.Error, fmt.Sprintf("error with HTTP status code %s", strconv.Itoa(status)))
 			}

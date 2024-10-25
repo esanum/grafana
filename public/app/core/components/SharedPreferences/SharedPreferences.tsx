@@ -1,7 +1,8 @@
 import { css } from '@emotion/css';
-import React, { PureComponent } from 'react';
+import { PureComponent } from 'react';
+import * as React from 'react';
 
-import { FeatureState, SelectableValue, getBuiltInThemes, ThemeRegistryItem } from '@grafana/data';
+import { FeatureState, getBuiltInThemes, ThemeRegistryItem } from '@grafana/data';
 import { selectors } from '@grafana/e2e-selectors';
 import { config, reportInteraction } from '@grafana/runtime';
 import { Preferences as UserPreferencesDTO } from '@grafana/schema/src/raw/preferences/x/preferences_types.gen';
@@ -9,17 +10,16 @@ import {
   Button,
   Field,
   FieldSet,
-  Form,
   Label,
-  Select,
   stylesFactory,
   TimeZonePicker,
   WeekStartPicker,
   FeatureBadge,
 } from '@grafana/ui';
+import { Combobox, ComboboxOption } from '@grafana/ui/src/unstable';
 import { DashboardPicker } from 'app/core/components/Select/DashboardPicker';
 import { t, Trans } from 'app/core/internationalization';
-import { LANGUAGES } from 'app/core/internationalization/constants';
+import { LANGUAGES, PSEUDO_LOCALE } from 'app/core/internationalization/constants';
 import { PreferencesService } from 'app/core/services/PreferencesService';
 import { changeTheme } from 'app/core/services/theme';
 
@@ -32,11 +32,21 @@ export interface Props {
 
 export type State = UserPreferencesDTO;
 
-function getLanguageOptions(): Array<SelectableValue<string>> {
+function getLanguageOptions(): ComboboxOption[] {
   const languageOptions = LANGUAGES.map((v) => ({
     value: v.code,
     label: v.name,
-  }));
+  })).sort((a, b) => {
+    if (a.value === PSEUDO_LOCALE) {
+      return 1;
+    }
+
+    if (b.value === PSEUDO_LOCALE) {
+      return -1;
+    }
+
+    return a.label.localeCompare(b.label);
+  });
 
   const options = [
     {
@@ -51,7 +61,7 @@ function getLanguageOptions(): Array<SelectableValue<string>> {
 
 export class SharedPreferences extends PureComponent<Props, State> {
   service: PreferencesService;
-  themeOptions: SelectableValue[];
+  themeOptions: ComboboxOption[];
 
   constructor(props: Props) {
     super(props);
@@ -63,6 +73,7 @@ export class SharedPreferences extends PureComponent<Props, State> {
       weekStart: '',
       language: '',
       queryHistory: { homeTab: '' },
+      navbar: { bookmarkUrls: [] },
     };
 
     this.themeOptions = getBuiltInThemes(config.featureToggles.extraThemes).map((theme) => ({
@@ -84,20 +95,25 @@ export class SharedPreferences extends PureComponent<Props, State> {
       weekStart: prefs.weekStart,
       language: prefs.language,
       queryHistory: prefs.queryHistory,
+      navbar: prefs.navbar,
     });
   }
 
-  onSubmitForm = async () => {
+  onSubmitForm = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     const confirmationResult = this.props.onConfirm ? await this.props.onConfirm() : true;
 
     if (confirmationResult) {
-      const { homeDashboardUID, theme, timezone, weekStart, language, queryHistory } = this.state;
-      await this.service.update({ homeDashboardUID, theme, timezone, weekStart, language, queryHistory });
+      const { homeDashboardUID, theme, timezone, weekStart, language, queryHistory, navbar } = this.state;
+      await this.service.update({ homeDashboardUID, theme, timezone, weekStart, language, queryHistory, navbar });
       window.location.reload();
     }
   };
 
-  onThemeChanged = (value: SelectableValue<string>) => {
+  onThemeChanged = (value: ComboboxOption<string> | null) => {
+    if (!value) {
+      return;
+    }
     this.setState({ theme: value.value });
 
     if (value.value) {
@@ -137,95 +153,84 @@ export class SharedPreferences extends PureComponent<Props, State> {
     const currentThemeOption = this.themeOptions.find((x) => x.value === theme) ?? this.themeOptions[0];
 
     return (
-      <Form onSubmit={this.onSubmitForm}>
-        {() => {
-          return (
-            <FieldSet label={<Trans i18nKey="shared-preferences.title">Preferences</Trans>} disabled={disabled}>
-              <Field label={t('shared-preferences.fields.theme-label', 'Interface theme')}>
-                <Select
-                  options={this.themeOptions}
-                  value={currentThemeOption}
-                  onChange={this.onThemeChanged}
-                  inputId="shared-preferences-theme-select"
-                />
-              </Field>
+      <form onSubmit={this.onSubmitForm} className={styles.form}>
+        <FieldSet label={<Trans i18nKey="shared-preferences.title">Preferences</Trans>} disabled={disabled}>
+          <Field label={t('shared-preferences.fields.theme-label', 'Interface theme')}>
+            <Combobox
+              options={this.themeOptions}
+              value={currentThemeOption.value}
+              onChange={this.onThemeChanged}
+              id="shared-preferences-theme-select"
+            />
+          </Field>
 
-              <Field
-                label={
-                  <Label htmlFor="home-dashboard-select">
-                    <span className={styles.labelText}>
-                      <Trans i18nKey="shared-preferences.fields.home-dashboard-label">Home Dashboard</Trans>
-                    </span>
-                  </Label>
-                }
-                data-testid="User preferences home dashboard drop down"
-              >
-                <DashboardPicker
-                  value={homeDashboardUID}
-                  onChange={(v) => this.onHomeDashboardChanged(v?.uid ?? '')}
-                  defaultOptions={true}
-                  isClearable={true}
-                  placeholder={t('shared-preferences.fields.home-dashboard-placeholder', 'Default dashboard')}
-                  inputId="home-dashboard-select"
-                />
-              </Field>
+          <Field
+            label={
+              <Label htmlFor="home-dashboard-select">
+                <span className={styles.labelText}>
+                  <Trans i18nKey="shared-preferences.fields.home-dashboard-label">Home Dashboard</Trans>
+                </span>
+              </Label>
+            }
+            data-testid="User preferences home dashboard drop down"
+          >
+            <DashboardPicker
+              value={homeDashboardUID}
+              onChange={(v) => this.onHomeDashboardChanged(v?.uid ?? '')}
+              defaultOptions={true}
+              isClearable={true}
+              placeholder={t('shared-preferences.fields.home-dashboard-placeholder', 'Default dashboard')}
+              inputId="home-dashboard-select"
+            />
+          </Field>
 
-              <Field
-                label={t('shared-dashboard.fields.timezone-label', 'Timezone')}
-                data-testid={selectors.components.TimeZonePicker.containerV2}
-              >
-                <TimeZonePicker
-                  includeInternal={true}
-                  value={timezone}
-                  onChange={this.onTimeZoneChanged}
-                  inputId="shared-preferences-timezone-picker"
-                />
-              </Field>
+          <Field
+            label={t('shared-dashboard.fields.timezone-label', 'Timezone')}
+            data-testid={selectors.components.TimeZonePicker.containerV2}
+          >
+            <TimeZonePicker
+              includeInternal={true}
+              value={timezone}
+              onChange={this.onTimeZoneChanged}
+              inputId="shared-preferences-timezone-picker"
+            />
+          </Field>
 
-              <Field
-                label={t('shared-preferences.fields.week-start-label', 'Week start')}
-                data-testid={selectors.components.WeekStartPicker.containerV2}
-              >
-                <WeekStartPicker
-                  value={weekStart || ''}
-                  onChange={this.onWeekStartChanged}
-                  inputId={'shared-preferences-week-start-picker'}
-                />
-              </Field>
+          <Field
+            label={t('shared-preferences.fields.week-start-label', 'Week start')}
+            data-testid={selectors.components.WeekStartPicker.containerV2}
+          >
+            <WeekStartPicker
+              value={weekStart || ''}
+              onChange={this.onWeekStartChanged}
+              inputId={'shared-preferences-week-start-picker'}
+            />
+          </Field>
 
-              <Field
-                label={
-                  <Label htmlFor="locale-select">
-                    <span className={styles.labelText}>
-                      <Trans i18nKey="shared-preferences.fields.locale-label">Language</Trans>
-                    </span>
-                    <FeatureBadge featureState={FeatureState.beta} />
-                  </Label>
-                }
-                data-testid="User preferences language drop down"
-              >
-                <Select
-                  value={languages.find((lang) => lang.value === language)}
-                  onChange={(lang: SelectableValue<string>) => this.onLanguageChanged(lang.value ?? '')}
-                  options={languages}
-                  placeholder={t('shared-preferences.fields.locale-placeholder', 'Choose language')}
-                  inputId="locale-select"
-                />
-              </Field>
-
-              <div className="gf-form-button-row">
-                <Button
-                  type="submit"
-                  variant="primary"
-                  data-testid={selectors.components.UserProfile.preferencesSaveButton}
-                >
-                  <Trans i18nKey="common.save">Save</Trans>
-                </Button>
-              </div>
-            </FieldSet>
-          );
-        }}
-      </Form>
+          <Field
+            label={
+              <Label htmlFor="locale-select">
+                <span className={styles.labelText}>
+                  <Trans i18nKey="shared-preferences.fields.locale-label">Language</Trans>
+                </span>
+                <FeatureBadge featureState={FeatureState.beta} />
+              </Label>
+            }
+            data-testid="User preferences language drop down"
+          >
+            <Combobox
+              value={languages.find((lang) => lang.value === language)?.value || ''}
+              onChange={(lang: ComboboxOption | null) => this.onLanguageChanged(lang?.value ?? '')}
+              options={languages}
+              placeholder={t('shared-preferences.fields.locale-placeholder', 'Choose language')}
+              id="locale-select"
+            />
+          </Field>
+        </FieldSet>
+        <Button type="submit" variant="primary" data-testid={selectors.components.UserProfile.preferencesSaveButton}>
+          <Trans i18nKey="common.save">Save</Trans>
+        </Button>
+      </form>
     );
   }
 }
@@ -234,9 +239,13 @@ export default SharedPreferences;
 
 const getStyles = stylesFactory(() => {
   return {
-    labelText: css`
-      margin-right: 6px;
-    `,
+    labelText: css({
+      marginRight: '6px',
+    }),
+    form: css({
+      width: '100%',
+      maxWidth: '600px',
+    }),
   };
 });
 

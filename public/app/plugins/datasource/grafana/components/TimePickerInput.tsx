@@ -1,7 +1,6 @@
 import { css, cx } from '@emotion/css';
 import { Moment } from 'moment';
 import TimePicker from 'rc-time-picker';
-import React from 'react';
 
 import { GrafanaTheme2 } from '@grafana/data';
 import { FormInputSize, Icon, useStyles2 } from '@grafana/ui';
@@ -96,7 +95,7 @@ const getStyles = (theme: GrafanaTheme2) => {
   const bgColor = theme.components.input.background;
   const menuShadowColor = theme.v1.palette.black;
   const optionBgHover = theme.colors.background.secondary;
-  const borderRadius = theme.shape.borderRadius(1);
+  const borderRadius = theme.shape.radius.default;
   const borderColor = theme.components.input.borderColor;
 
   return {

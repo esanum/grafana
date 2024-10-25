@@ -1,7 +1,7 @@
 ---
 aliases:
   - ../guides/whats-new-in-v9-2/
-description: Feature and improvement highlights for Grafana v9.2
+description: Learn about new and updated features in Grafana v9.2
 keywords:
   - grafana
   - new
@@ -21,7 +21,7 @@ weight: -33
 
 Welcome to Grafana v9.2, a hefty minor release with a swath of improvements that help you create and share dashboards and alerts.
 Read on to learn about progress on public dashboards, our new panel help menu, custom branding in Grafana Enterprise, and improvements to access control.
-If you'd prefer to dig into the details, check out the complete [changelog](https://github.com/grafana/grafana/blob/master/CHANGELOG.md).
+If you'd prefer to dig into the details, check out the complete [changelog](https://github.com/grafana/grafana/blob/main/CHANGELOG.md).
 
 ## Panel help menu
 
@@ -95,7 +95,7 @@ External alertmanagers should now be configured as data sources using Grafana Co
 _Available in Experimental in Grafana Open Source, Enterprise, and Cloud._
 _To enable public dashboards, you must enable a feature flag or request this feature from support._
 
-[Public dashboards](/docs/grafana/latest/dashboards/dashboard-public/) launched as an experimental feature in Grafana v9.1.
+[Public dashboards](https://grafana.com/docs/grafana/<GRAFANA_VERSION>/dashboards/share-dashboards-panels/shared-dashboards) launched as an experimental feature in Grafana v9.1.
 We've received lots of great feedback on this much-anticipated feature and thank everyone who has helped us improve it.
 The team has been hard at work polishing public dashboards, and we've closed quite a few bugs related to community reports.
 If you're trying out public dashboards, let us know how it is going in the [open discussion in GitHub](https://github.com/grafana/grafana/discussions/49253).

@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/ini.v1"
@@ -20,20 +21,22 @@ import (
 	"github.com/grafana/grafana/pkg/extensions"
 	"github.com/grafana/grafana/pkg/infra/db"
 	"github.com/grafana/grafana/pkg/infra/fs"
+	"github.com/grafana/grafana/pkg/infra/tracing"
 	"github.com/grafana/grafana/pkg/server"
+	"github.com/grafana/grafana/pkg/services/apiserver/options"
 	"github.com/grafana/grafana/pkg/services/org"
 	"github.com/grafana/grafana/pkg/services/org/orgimpl"
 	"github.com/grafana/grafana/pkg/services/quota/quotaimpl"
-	"github.com/grafana/grafana/pkg/services/sqlstore"
 	"github.com/grafana/grafana/pkg/services/supportbundles/supportbundlestest"
 	"github.com/grafana/grafana/pkg/services/user"
 	"github.com/grafana/grafana/pkg/services/user/userimpl"
 	"github.com/grafana/grafana/pkg/setting"
+	"github.com/grafana/grafana/pkg/storage/unified/sql"
 )
 
 // StartGrafana starts a Grafana server.
 // The server address is returned.
-func StartGrafana(t *testing.T, grafDir, cfgPath string) (string, *sqlstore.SQLStore) {
+func StartGrafana(t *testing.T, grafDir, cfgPath string) (string, db.DB) {
 	addr, env := StartGrafanaEnv(t, grafDir, cfgPath)
 	return addr, env.SQLStore
 }
@@ -45,28 +48,86 @@ func StartGrafanaEnv(t *testing.T, grafDir, cfgPath string) (string, *server.Tes
 	setting.IsEnterprise = extensions.IsEnterprise
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
-	cmdLineArgs := setting.CommandLineArgs{Config: cfgPath, HomePath: grafDir}
+	cfg, err := setting.NewCfgFromArgs(setting.CommandLineArgs{Config: cfgPath, HomePath: grafDir})
+	require.NoError(t, err)
 	serverOpts := server.Options{Listener: listener, HomePath: grafDir}
 	apiServerOpts := api.ServerOptions{Listener: listener}
 
-	env, err := server.InitializeForTest(cmdLineArgs, serverOpts, apiServerOpts)
-	require.NoError(t, err)
-	require.NoError(t, env.SQLStore.Sync())
+	// Replace the placeholder in the `signing_keys_url` with the actual address
+	grpcServerAuthSection := cfg.SectionWithEnvOverrides("grpc_server_authentication")
+	signingKeysUrl := grpcServerAuthSection.Key("signing_keys_url")
+	signingKeysUrl.SetValue(strings.Replace(signingKeysUrl.String(), "<placeholder>", listener.Addr().String(), 1))
 
-	require.NotNil(t, env.SQLStore.Cfg)
-	dbSec, err := env.SQLStore.Cfg.Raw.GetSection("database")
+	// Potentially allocate a real gRPC port for unified storage
+	runstore := false
+	unistore, _ := cfg.Raw.GetSection("grafana-apiserver")
+	if unistore != nil &&
+		unistore.Key("storage_type").MustString("") == string(options.StorageTypeUnifiedGrpc) &&
+		unistore.Key("address").String() == "" {
+		// Allocate a new address
+		listener2, err := net.Listen("tcp", "127.0.0.1:0")
+		require.NoError(t, err)
+
+		cfg.GRPCServerNetwork = "tcp"
+		cfg.GRPCServerAddress = listener2.Addr().String()
+		cfg.GRPCServerTLSConfig = nil
+		_, err = unistore.NewKey("address", cfg.GRPCServerAddress)
+		require.NoError(t, err)
+
+		// release the one we just discovered -- it will be used by the services on startup
+		err = listener2.Close()
+		require.NoError(t, err)
+		runstore = true
+	}
+
+	env, err := server.InitializeForTest(t, cfg, serverOpts, apiServerOpts)
+	require.NoError(t, err)
+
+	require.NotNil(t, env.Cfg)
+	dbSec, err := env.Cfg.Raw.GetSection("database")
 	require.NoError(t, err)
 	assert.Greater(t, dbSec.Key("query_retries").MustInt(), 0)
 
+	env.Server.HTTPServer.AddMiddleware(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if env.RequestMiddleware != nil {
+				h := env.RequestMiddleware(next)
+				h.ServeHTTP(w, r)
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	})
+
+	// UnifiedStorageOverGRPC
+	var storage sql.UnifiedStorageGrpcService
+	if runstore {
+		storage, err = sql.ProvideUnifiedStorageGrpcService(env.Cfg, env.FeatureToggles, env.SQLStore,
+			env.Cfg.Logger, prometheus.NewPedanticRegistry())
+		require.NoError(t, err)
+		ctx := context.Background()
+		err = storage.StartAsync(ctx)
+		require.NoError(t, err)
+		err = storage.AwaitRunning(ctx)
+		require.NoError(t, err)
+
+		require.NoError(t, err)
+		t.Logf("Unified storage running on %s", storage.GetAddress())
+	}
+
 	go func() {
 		// When the server runs, it will also build and initialize the service graph
-		if err := env.Server.Run(ctx); err != nil {
+		if err := env.Server.Run(); err != nil {
 			t.Log("Server exited uncleanly", "error", err)
 		}
 	}()
 	t.Cleanup(func() {
 		if err := env.Server.Shutdown(ctx, "test cleanup"); err != nil {
 			t.Error("Timed out waiting on server to shut down")
+		}
+		if storage != nil {
+			storage.StopAsync()
 		}
 	})
 
@@ -84,21 +145,6 @@ func StartGrafanaEnv(t *testing.T, grafDir, cfgPath string) (string, *server.Tes
 	t.Logf("Grafana is listening on %s", addr)
 
 	return addr, env
-}
-
-// SetUpDatabase sets up the Grafana database.
-func SetUpDatabase(t *testing.T, grafDir string) *sqlstore.SQLStore {
-	t.Helper()
-
-	sqlStore := db.InitTestDB(t, sqlstore.InitTestDBOpt{
-		EnsureDefaultOrgAndUser: true,
-	})
-
-	// Make sure changes are synced with other goroutines
-	err := sqlStore.Sync()
-	require.NoError(t, err)
-
-	return sqlStore
 }
 
 // CreateGrafDir creates the Grafana directory.
@@ -141,17 +187,46 @@ func CreateGrafDir(t *testing.T, opts ...GrafanaOpts) (string, string) {
 	publicDir := filepath.Join(tmpDir, "public")
 	err = os.MkdirAll(publicDir, 0750)
 	require.NoError(t, err)
+
 	viewsDir := filepath.Join(publicDir, "views")
 	err = fs.CopyRecursive(filepath.Join(rootDir, "public", "views"), viewsDir)
 	require.NoError(t, err)
-	// Copy index template to index.html, since Grafana will try to use the latter
-	err = fs.CopyFile(filepath.Join(rootDir, "public", "views", "index-template.html"),
-		filepath.Join(viewsDir, "index.html"))
+
+	// add a stub manifest to the build directory
+	buildDir := filepath.Join(publicDir, "build")
+	err = os.MkdirAll(buildDir, 0750)
 	require.NoError(t, err)
-	// Copy error template to error.html, since Grafana will try to use the latter
-	err = fs.CopyFile(filepath.Join(rootDir, "public", "views", "error-template.html"),
-		filepath.Join(viewsDir, "error.html"))
+	err = os.WriteFile(filepath.Join(buildDir, "assets-manifest.json"), []byte(`{
+		"entrypoints": {
+		  "app": {
+			"assets": {
+			  "js": ["public/build/runtime.XYZ.js"]
+			}
+		  },
+		  "swagger": {
+			"assets": {
+			  "js": ["public/build/runtime.XYZ.js"]
+			}
+		  },
+		  "dark": {
+			"assets": {
+			  "css": ["public/build/dark.css"]
+			}
+		  },
+		  "light": {
+			"assets": {
+			  "css": ["public/build/light.css"]
+			}
+		  }
+		},
+		"runtime.50398398ecdeaf58968c.js": {
+		  "src": "public/build/runtime.XYZ.js",
+		  "integrity": "sha256-k1g7TksMHFQhhQGE"
+		}
+	  }
+	  `), 0750)
 	require.NoError(t, err)
+
 	emailsDir := filepath.Join(publicDir, "emails")
 	err = fs.CopyRecursive(filepath.Join(rootDir, "public", "emails"), emailsDir)
 	require.NoError(t, err)
@@ -199,15 +274,6 @@ func CreateGrafDir(t *testing.T, opts ...GrafanaOpts) (string, string) {
 	_, err = serverSect.NewKey("static_root_path", publicDir)
 	require.NoError(t, err)
 
-	authSect, err := cfg.NewSection("auth")
-	require.NoError(t, err)
-	authBrokerState := "false"
-	if len(opts) > 0 && opts[0].AuthBrokerEnabled {
-		authBrokerState = "true"
-	}
-	_, err = authSect.NewKey("broker", authBrokerState)
-	require.NoError(t, err)
-
 	anonSect, err := cfg.NewSection("auth.anonymous")
 	require.NoError(t, err)
 	_, err = anonSect.NewKey("enabled", "true")
@@ -230,6 +296,13 @@ func CreateGrafDir(t *testing.T, opts ...GrafanaOpts) (string, string) {
 	_, err = analyticsSect.NewKey("intercom_secret", "intercom_secret_at_config")
 	require.NoError(t, err)
 
+	grpcServerAuth, err := cfg.NewSection("grpc_server_authentication")
+	require.NoError(t, err)
+	_, err = grpcServerAuth.NewKey("signing_keys_url", "http://<placeholder>/api/signing-keys/keys")
+	require.NoError(t, err)
+	_, err = grpcServerAuth.NewKey("allowed_audiences", "org:1")
+	require.NoError(t, err)
+
 	getOrCreateSection := func(name string) (*ini.Section, error) {
 		section, err := cfg.GetSection(name)
 		if err != nil {
@@ -238,6 +311,7 @@ func CreateGrafDir(t *testing.T, opts ...GrafanaOpts) (string, string) {
 		return section, err
 	}
 
+	queryRetries := 3
 	for _, o := range opts {
 		if o.EnableCSP {
 			securitySect, err := cfg.NewSection("security")
@@ -307,12 +381,6 @@ func CreateGrafDir(t *testing.T, opts ...GrafanaOpts) (string, string) {
 			_, err = usersSection.NewKey("viewers_can_edit", "true")
 			require.NoError(t, err)
 		}
-		if o.DisableLegacyAlerting {
-			alertingSection, err := cfg.GetSection("alerting")
-			require.NoError(t, err)
-			_, err = alertingSection.NewKey("enabled", "false")
-			require.NoError(t, err)
-		}
 		if o.EnableUnifiedAlerting {
 			unifiedAlertingSection, err := getOrCreateSection("unified_alerting")
 			require.NoError(t, err)
@@ -338,6 +406,19 @@ func CreateGrafDir(t *testing.T, opts ...GrafanaOpts) (string, string) {
 			require.NoError(t, err)
 		}
 
+		if o.APIServerStorageType != "" {
+			section, err := getOrCreateSection("grafana-apiserver")
+			require.NoError(t, err)
+			_, err = section.NewKey("storage_type", string(o.APIServerStorageType))
+			require.NoError(t, err)
+
+			// Hardcoded local etcd until this is needed to run in CI
+			if o.APIServerStorageType == "etcd" {
+				_, err = section.NewKey("etcd_servers", "localhost:2379")
+				require.NoError(t, err)
+			}
+		}
+
 		if o.GRPCServerAddress != "" {
 			logSection, err := getOrCreateSection("grpc_server")
 			require.NoError(t, err)
@@ -345,15 +426,38 @@ func CreateGrafDir(t *testing.T, opts ...GrafanaOpts) (string, string) {
 			require.NoError(t, err)
 		}
 		// retry queries 3 times by default
-		queryRetries := 3
 		if o.QueryRetries != 0 {
 			queryRetries = int(o.QueryRetries)
 		}
-		logSection, err := getOrCreateSection("database")
-		require.NoError(t, err)
-		_, err = logSection.NewKey("query_retries", fmt.Sprintf("%d", queryRetries))
-		require.NoError(t, err)
+
+		if o.NGAlertSchedulerBaseInterval > 0 {
+			unifiedAlertingSection, err := getOrCreateSection("unified_alerting")
+			require.NoError(t, err)
+			_, err = unifiedAlertingSection.NewKey("scheduler_tick_interval", o.NGAlertSchedulerBaseInterval.String())
+			require.NoError(t, err)
+			_, err = unifiedAlertingSection.NewKey("min_interval", o.NGAlertSchedulerBaseInterval.String())
+			require.NoError(t, err)
+		}
+
+		if o.GrafanaComAPIURL != "" {
+			grafanaComSection, err := getOrCreateSection("grafana_com")
+			require.NoError(t, err)
+			_, err = grafanaComSection.NewKey("api_url", o.GrafanaComAPIURL)
+			require.NoError(t, err)
+		}
+		if o.UnifiedStorageConfig != nil {
+			for k, v := range o.UnifiedStorageConfig {
+				section, err := getOrCreateSection(fmt.Sprintf("unified_storage.%s", k))
+				require.NoError(t, err)
+				_, err = section.NewKey("dualWriterMode", fmt.Sprintf("%d", v.DualWriterMode))
+				require.NoError(t, err)
+			}
+		}
 	}
+	logSection, err := getOrCreateSection("database")
+	require.NoError(t, err)
+	_, err = logSection.NewKey("query_retries", fmt.Sprintf("%d", queryRetries))
+	require.NoError(t, err)
 
 	cfgPath := filepath.Join(cfgDir, "test.ini")
 	err = cfg.SaveTo(cfgPath)
@@ -378,6 +482,7 @@ type GrafanaOpts struct {
 	EnableFeatureToggles                  []string
 	NGAlertAdminConfigPollInterval        time.Duration
 	NGAlertAlertmanagerConfigPollInterval time.Duration
+	NGAlertSchedulerBaseInterval          time.Duration
 	AnonymousUserRole                     org.RoleType
 	EnableQuota                           bool
 	DashboardOrgQuota                     *int64
@@ -393,20 +498,26 @@ type GrafanaOpts struct {
 	EnableLog                             bool
 	GRPCServerAddress                     string
 	QueryRetries                          int64
-	AuthBrokerEnabled                     bool
+	GrafanaComAPIURL                      string
+	UnifiedStorageConfig                  map[string]setting.UnifiedStorageConfig
+
+	// When "unified-grpc" is selected it will also start the grpc server
+	APIServerStorageType options.StorageType
 }
 
-func CreateUser(t *testing.T, store *sqlstore.SQLStore, cmd user.CreateUserCommand) *user.User {
+func CreateUser(t *testing.T, store db.DB, cfg *setting.Cfg, cmd user.CreateUserCommand) *user.User {
 	t.Helper()
 
-	store.Cfg.AutoAssignOrg = true
-	store.Cfg.AutoAssignOrgId = 1
+	cfg.AutoAssignOrg = true
+	cfg.AutoAssignOrgId = 1
 	cmd.OrgID = 1
 
-	quotaService := quotaimpl.ProvideService(store, store.Cfg)
-	orgService, err := orgimpl.ProvideService(store, store.Cfg, quotaService)
+	quotaService := quotaimpl.ProvideService(store, cfg)
+	orgService, err := orgimpl.ProvideService(store, cfg, quotaService)
 	require.NoError(t, err)
-	usrSvc, err := userimpl.ProvideService(store, orgService, store.Cfg, nil, nil, quotaService, supportbundlestest.NewFakeBundleService())
+	usrSvc, err := userimpl.ProvideService(
+		store, orgService, cfg, nil, nil, tracing.InitializeTracerForTest(), quotaService, supportbundlestest.NewFakeBundleService(),
+	)
 	require.NoError(t, err)
 
 	o, err := orgService.CreateWithMember(context.Background(), &org.CreateOrgCommand{Name: fmt.Sprintf("test org %d", time.Now().UnixNano())})

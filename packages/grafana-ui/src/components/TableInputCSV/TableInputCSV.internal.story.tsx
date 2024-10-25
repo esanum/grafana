@@ -1,17 +1,13 @@
 import { action } from '@storybook/addon-actions';
 import { Meta, StoryFn } from '@storybook/react';
-import React from 'react';
 
 import { DataFrame } from '@grafana/data';
-
-import { withCenteredStory } from '../../utils/storybook/withCenteredStory';
 
 import { TableInputCSV } from './TableInputCSV';
 
 const meta: Meta<typeof TableInputCSV> = {
   title: 'Forms/TableInputCSV',
   component: TableInputCSV,
-  decorators: [withCenteredStory],
 };
 
 export const basic: StoryFn<typeof TableInputCSV> = () => {

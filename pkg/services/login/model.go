@@ -2,40 +2,14 @@ package login
 
 import (
 	"fmt"
-	"sync"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/oauth2"
 
 	contextmodel "github.com/grafana/grafana/pkg/services/contexthandler/model"
 	"github.com/grafana/grafana/pkg/services/org"
 	"github.com/grafana/grafana/pkg/services/user"
 	"github.com/grafana/grafana/pkg/setting"
-)
-
-type LoginStats struct {
-	DuplicateUserEntries int `xorm:"duplicate_user_entries"`
-	MixedCasedUsers      int `xorm:"mixed_cased_users"`
-}
-
-const (
-	ExporterName              = "grafana"
-	MetricsCollectionInterval = time.Hour * 4 // every 4 hours, indication of duplicate users
-)
-
-var (
-	// MStatDuplicateUserEntries is a indication metric gauge for number of users with duplicate emails or logins
-	MStatDuplicateUserEntries prometheus.Gauge
-
-	// MStatHasDuplicateEntries is a metric for if there is duplicate users
-	MStatHasDuplicateEntries prometheus.Gauge
-
-	// MStatMixedCasedUsers is a metric for if there is duplicate users
-	MStatMixedCasedUsers prometheus.Gauge
-
-	Once        sync.Once
-	Initialised bool = false
 )
 
 type UserAuth struct {
@@ -53,6 +27,7 @@ type UserAuth struct {
 
 type ExternalUserInfo struct {
 	OAuthToken     *oauth2.Token
+	SAMLSession    *SAMLSession
 	AuthModule     string
 	AuthId         string
 	UserId         int64
@@ -64,6 +39,11 @@ type ExternalUserInfo struct {
 	IsGrafanaAdmin *bool // This is a pointer to know if we should sync this or not (nil = ignore sync)
 	IsDisabled     bool
 	SkipTeamSync   bool
+}
+
+type SAMLSession struct {
+	NameID       string
+	SessionIndex string
 }
 
 func (e *ExternalUserInfo) String() string {
@@ -90,13 +70,6 @@ type RequestURIKey struct{}
 
 // ---------------------
 // COMMANDS
-
-type UpsertUserCommand struct {
-	ReqContext   *contextmodel.ReqContext
-	ExternalUser *ExternalUserInfo
-	UserLookupParams
-	SignupAllowed bool
-}
 
 type SetAuthInfoCommand struct {
 	AuthModule string
@@ -137,13 +110,8 @@ type GetUserByAuthInfoQuery struct {
 
 type UserLookupParams struct {
 	// Describes lookup order as well
-	UserID *int64  // if set, will try to find the user by id
-	Email  *string // if set, will try to find the user by email
-	Login  *string // if set, will try to find the user by login
-}
-
-type GetExternalUserInfoByLoginQuery struct {
-	LoginOrEmail string
+	Email *string // if set, will try to find the user by email
+	Login *string // if set, will try to find the user by login
 }
 
 type GetAuthInfoQuery struct {

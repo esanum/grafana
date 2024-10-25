@@ -1,29 +1,32 @@
-import { rest } from 'msw';
+import { http, HttpResponse } from 'msw';
 import { SetupServer } from 'msw/node';
 
+import { grafanaAlertingConfigurationStatusHandler } from 'app/features/alerting/unified/mocks/server/handlers/alertmanagers';
+
 import {
-  AlertManagerCortexConfig,
-  ExternalAlertmanagersResponse,
+  AlertmanagerChoice,
+  ExternalAlertmanagersStatusResponse,
 } from '../../../../plugins/datasource/alertmanager/types';
-import { AlertmanagersChoiceResponse } from '../api/alertmanagerApi';
-import { getDatasourceAPIUid } from '../utils/datasource';
+import { GrafanaAlertingConfigurationStatusResponse } from '../api/alertmanagerApi';
 
-export function mockAlertmanagerChoiceResponse(server: SetupServer, response: AlertmanagersChoiceResponse) {
-  server.use(rest.get('/api/v1/ngalert', (req, res, ctx) => res(ctx.status(200), ctx.json(response))));
-}
+export const defaultGrafanaAlertingConfigurationStatusResponse: GrafanaAlertingConfigurationStatusResponse = {
+  alertmanagersChoice: AlertmanagerChoice.Internal,
+  numExternalAlertmanagers: 0,
+};
 
-export function mockAlertmanagersResponse(server: SetupServer, response: ExternalAlertmanagersResponse) {
-  server.use(rest.get('/api/v1/ngalert/alertmanagers', (req, res, ctx) => res(ctx.status(200), ctx.json(response))));
-}
-
-export function mockAlertmanagerConfigResponse(
+export function mockAlertmanagerChoiceResponse(
   server: SetupServer,
-  alertManagerSourceName: string,
-  response: AlertManagerCortexConfig
+  response: GrafanaAlertingConfigurationStatusResponse
 ) {
-  server.use(
-    rest.get(`/api/alertmanager/${getDatasourceAPIUid(alertManagerSourceName)}/config/api/v1/alerts`, (req, res, ctx) =>
-      res(ctx.status(200), ctx.json(response))
-    )
-  );
+  server.use(grafanaAlertingConfigurationStatusHandler(response));
+}
+
+export const emptyExternalAlertmanagersResponse: ExternalAlertmanagersStatusResponse = {
+  data: {
+    droppedAlertManagers: [],
+    activeAlertManagers: [],
+  },
+};
+export function mockAlertmanagersResponse(server: SetupServer, response: ExternalAlertmanagersStatusResponse) {
+  server.use(http.get('/api/v1/ngalert/alertmanagers', () => HttpResponse.json(response)));
 }

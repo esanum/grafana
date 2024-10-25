@@ -1,8 +1,5 @@
 import { action } from '@storybook/addon-actions';
 import { Meta, StoryFn } from '@storybook/react';
-import React from 'react';
-
-import { withCenteredStory } from '../../utils/storybook/withCenteredStory';
 
 import { Tag } from './Tag';
 import mdx from './Tag.mdx';
@@ -10,7 +7,6 @@ import mdx from './Tag.mdx';
 const meta: Meta<typeof Tag> = {
   title: 'Forms/Tags/Tag',
   component: Tag,
-  decorators: [withCenteredStory],
   parameters: {
     docs: {
       page: mdx,

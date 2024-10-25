@@ -11,19 +11,41 @@ export function useTableStyles(theme: GrafanaTheme2, cellHeightOption: TableCell
   const rowHeight = cellHeight + 2;
   const headerHeight = 28;
 
-  const buildCellContainerStyle = (color?: string, background?: string, overflowOnHover?: boolean) => {
+  const buildCellContainerStyle = (
+    color?: string,
+    background?: string,
+    backgroundHover?: string,
+    overflowOnHover?: boolean,
+    asCellText?: boolean,
+    textShouldWrap?: boolean,
+    textWrapped?: boolean,
+    rowStyled?: boolean,
+    rowExpanded?: boolean
+  ) => {
     return css({
       label: overflowOnHover ? 'cellContainerOverflow' : 'cellContainerNoOverflow',
       padding: `${cellPadding}px`,
       width: '100%',
       // Cell height need to account for row border
-      height: `${rowHeight - 1}px`,
+      height: rowExpanded ? 'auto !important' : `${rowHeight - 1}px`,
+      wordBreak: textWrapped ? 'break-all' : 'inherit',
+
       display: 'flex',
+
+      ...(asCellText
+        ? {
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            userSelect: 'text',
+            whiteSpace: 'nowrap',
+          }
+        : {}),
+
       alignItems: 'center',
       borderRight: `1px solid ${borderColor}`,
 
-      color: color ?? undefined,
-      background: background ?? undefined,
+      color: rowStyled ? 'inherit' : (color ?? undefined),
+      background: rowStyled ? undefined : (background ?? undefined),
       backgroundClip: 'padding-box',
 
       '&:last-child:not(:only-child)': {
@@ -31,15 +53,21 @@ export function useTableStyles(theme: GrafanaTheme2, cellHeightOption: TableCell
       },
 
       '&:hover': {
-        overflow: overflowOnHover ? 'visible' : undefined,
-        width: overflowOnHover ? 'auto !important' : undefined,
+        overflow: overflowOnHover && !textWrapped ? 'visible' : undefined,
+        width: textShouldWrap || !overflowOnHover ? 'auto' : 'auto !important',
+        height: (textShouldWrap || overflowOnHover) && !textWrapped ? 'auto !important' : `${rowHeight - 1}px`,
+        minHeight: `${rowHeight - 1}px`,
+        wordBreak: textShouldWrap ? 'break-word' : undefined,
+        whiteSpace: textShouldWrap && overflowOnHover ? 'normal' : 'nowrap',
         boxShadow: overflowOnHover ? `0 0 2px ${theme.colors.primary.main}` : undefined,
-        background: overflowOnHover ? background ?? theme.components.table.rowHoverBackground : undefined,
-        zIndex: overflowOnHover ? 1 : undefined,
+        background: rowStyled ? 'inherit' : (backgroundHover ?? theme.colors.background.primary),
+        zIndex: 1,
         '.cellActions': {
+          color: '#FFF',
           visibility: 'visible',
           opacity: 1,
           width: 'auto',
+          background: 'rgba(0, 0, 0, 0.6)',
         },
       },
 
@@ -50,7 +78,7 @@ export function useTableStyles(theme: GrafanaTheme2, cellHeightOption: TableCell
       '.cellActions': {
         display: 'flex',
         position: overflowOnHover ? undefined : 'absolute',
-        top: overflowOnHover ? undefined : 0,
+        top: overflowOnHover ? undefined : '1px',
         right: overflowOnHover ? undefined : 0,
         margin: overflowOnHover ? theme.spacing(0, -0.5, 0, 0.5) : 'auto',
         visibility: 'hidden',
@@ -58,8 +86,8 @@ export function useTableStyles(theme: GrafanaTheme2, cellHeightOption: TableCell
         width: 0,
         alignItems: 'center',
         height: '100%',
-        padding: theme.spacing(1, 0.5, 1, 0.5),
-        background: background ? 'none' : theme.colors.emphasize(theme.colors.background.primary, 0.03),
+        padding: theme.spacing(1, 0.5, 1, 1),
+        background: background ? 'none' : 'rgba(0, 0, 0, 0.5)',
 
         svg: {
           color,
@@ -141,13 +169,17 @@ export function useTableStyles(theme: GrafanaTheme2, cellHeightOption: TableCell
         color: theme.colors.text.link,
       },
     }),
-    cellContainer: buildCellContainerStyle(undefined, undefined, true),
-    cellContainerNoOverflow: buildCellContainerStyle(undefined, undefined, false),
+    cellContainerText: buildCellContainerStyle(undefined, undefined, undefined, true, true),
+    cellContainerTextNoOverflow: buildCellContainerStyle(undefined, undefined, undefined, false, true),
+
+    cellContainer: buildCellContainerStyle(undefined, undefined, undefined, true, false),
+    cellContainerNoOverflow: buildCellContainerStyle(undefined, undefined, undefined, false, false),
     cellText: css({
       overflow: 'hidden',
       textOverflow: 'ellipsis',
       userSelect: 'text',
       whiteSpace: 'nowrap',
+      cursor: 'text',
     }),
     sortIcon: css({
       marginLeft: theme.spacing(0.5),
@@ -160,6 +192,7 @@ export function useTableStyles(theme: GrafanaTheme2, cellHeightOption: TableCell
       whiteSpace: 'nowrap',
       color: theme.colors.text.link,
       fontWeight: theme.typography.fontWeightMedium,
+      paddingRight: theme.spacing(1.5),
       '&:hover': {
         textDecoration: 'underline',
         color: theme.colors.text.link,
@@ -234,7 +267,9 @@ export function useTableStyles(theme: GrafanaTheme2, cellHeightOption: TableCell
       display: 'inline-block',
       background: resizerColor,
       opacity: 0,
-      transition: 'opacity 0.2s ease-in-out',
+      [theme.transitions.handleMotion('no-preference', 'reduce')]: {
+        transition: 'opacity 0.2s ease-in-out',
+      },
       width: '8px',
       height: '100%',
       position: 'absolute',

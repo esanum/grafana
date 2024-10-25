@@ -14,7 +14,8 @@
 
 import { css, cx } from '@emotion/css';
 import { get, maxBy, values } from 'lodash';
-import React, { memo, Dispatch, SetStateAction, useEffect, useCallback } from 'react';
+import { memo, Dispatch, SetStateAction, useEffect, useCallback } from 'react';
+import * as React from 'react';
 
 import { GrafanaTheme2 } from '@grafana/data';
 import { config, reportInteraction } from '@grafana/runtime';
@@ -129,8 +130,6 @@ export default memo(function NextPrevResult(props: NextPrevResultProps) {
 
   const getMatchesMetadata = useCallback(
     (depth: number, services: number) => {
-      const matchedServices: string[] = [];
-      const matchedDepth: number[] = [];
       let metadata = (
         <>
           <span>{`${trace.spans.length} spans`}</span>
@@ -144,13 +143,6 @@ export default memo(function NextPrevResult(props: NextPrevResultProps) {
       );
 
       if (spanFilterMatches) {
-        spanFilterMatches.forEach((spanID) => {
-          if (trace.processes[spanID]) {
-            matchedServices.push(trace.processes[spanID].serviceName);
-            matchedDepth.push(trace.spans.find((span) => span.spanID === spanID)?.depth || 0);
-          }
-        });
-
         if (spanFilterMatches.size === 0) {
           metadata = (
             <>
@@ -167,6 +159,13 @@ export default memo(function NextPrevResult(props: NextPrevResultProps) {
               ? `${focusedSpanIndexForSearch + 1}/${spanFilterMatches.size} ${type}`
               : `${spanFilterMatches.size} ${type}`;
 
+          const matchedServices: string[] = [];
+          spanFilterMatches.forEach((spanID) => {
+            if (trace.processes[spanID]) {
+              matchedServices.push(trace.processes[spanID].serviceName);
+            }
+          });
+
           metadata = (
             <>
               <span>{text}</span>
@@ -175,9 +174,7 @@ export default memo(function NextPrevResult(props: NextPrevResultProps) {
                   <div>
                     Services: {new Set(matchedServices).size}/{services}
                   </div>
-                  <div>
-                    Depth: {new Set(matchedDepth).size}/{depth}
-                  </div>
+                  <div>Depth: {depth}</div>
                 </>
               )}
             </>
@@ -232,26 +229,22 @@ export const getStyles = (theme: GrafanaTheme2, showSpanFilters: boolean) => {
   });
 
   return {
-    buttons: css`
-      display: inline-flex;
-      gap: 4px;
-    `,
-    buttonsDisabled: css`
-      cursor: not-allowed;
-    `,
-    button: css`
-      ${buttonStyles.button};
-    `,
-    buttonDisabled: css`
-      ${buttonStyles.disabled};
-      pointer-events: none;
-    `,
-    matches: css`
-      margin-right: ${theme.spacing(2)};
-    `,
-    tooltip: css`
-      color: #aaa;
-      margin: 0 0 0 5px;
-    `,
+    buttons: css({
+      display: 'inline-flex',
+      gap: '4px',
+    }),
+    buttonsDisabled: css({
+      cursor: 'not-allowed',
+    }),
+    button: buttonStyles.button,
+    buttonDisabled: css(buttonStyles.disabled, { pointerEvents: 'none' }),
+    matches: css({
+      marginRight: theme.spacing(2),
+      textWrap: 'nowrap',
+    }),
+    tooltip: css({
+      color: '#aaa',
+      margin: '0 0 0 5px',
+    }),
   };
 };

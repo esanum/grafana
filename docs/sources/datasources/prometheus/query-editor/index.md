@@ -15,15 +15,41 @@ labels:
 menuTitle: Query editor
 title: Prometheus query editor
 weight: 300
+refs:
+  query-transform-data:
+    - pattern: /docs/grafana/
+      destination: /docs/grafana/<GRAFANA_VERSION>/panels-visualizations/query-transform-data/
+    - pattern: /docs/grafana-cloud/
+      destination: /docs/grafana/<GRAFANA_VERSION>/panels-visualizations/query-transform-data/
+  table:
+    - pattern: /docs/grafana/
+      destination: /docs/grafana/<GRAFANA_VERSION>/panels-visualizations/visualizations/table/
+    - pattern: /docs/grafana-cloud/
+      destination: /docs/grafana/<GRAFANA_VERSION>/panels-visualizations/visualizations/table/
+  exemplars:
+    - pattern: /docs/grafana/
+      destination: /docs/grafana/<GRAFANA_VERSION>/fundamentals/exemplars/
+    - pattern: /docs/grafana-cloud/
+      destination: /docs/grafana/<GRAFANA_VERSION>/fundamentals/exemplars/
+  heatmap:
+    - pattern: /docs/grafana/
+      destination: /docs/grafana/<GRAFANA_VERSION>/panels-visualizations/visualizations/heatmap/
+    - pattern: /docs/grafana-cloud/
+      destination: /docs/grafana/<GRAFANA_VERSION>/panels-visualizations/visualizations/heatmap/
+  time-series-transform:
+    - pattern: /docs/grafana/
+      destination: /docs/grafana/<GRAFANA_VERSION>/panels-visualizations/visualizations/time-series/#transform
+    - pattern: /docs/grafana-cloud/
+      destination: /docs/grafana/<GRAFANA_VERSION>/panels-visualizations/visualizations/time-series/#transform
 ---
 
 # Prometheus query editor
 
 Grafana provides a query editor for the Prometheus data source to create queries in PromQL. For more information about PromQL, see [Querying Prometheus](http://prometheus.io/docs/querying/basics/).
 
-For general documentation on querying data sources in Grafana, see [Query and transform data]({{< relref "../../../panels-visualizations/query-transform-data" >}}).
+For general documentation on querying data sources in Grafana, see [Query and transform data](ref:query-transform-data).
 
-For options and functions common to all query editors, see [Query editors]({{< relref "../../../panels-visualizations/query-transform-data" >}}).
+For options and functions common to all query editors, see [Query editors](ref:query-transform-data).
 
 ## Choose a query editing mode
 
@@ -74,15 +100,15 @@ The **Legend** setting defines the time series's name. You can use a predefined 
 
 The **Min step** setting defines the lower bounds on the interval between data points.
 For example, set this to `1h` to hint that measurements are taken hourly.
-This setting supports the `$__interval` and `$__rate_interval` macros.
+This setting supports the `$__interval` and `$__rate_interval` macros. Be aware that the query range dates are aligned to the step and this can change the start and end of the range.
 
 ### Format
 
 Switch between the following format options:
 
-- **Time series** - The default time series format. See [Time series kind formats](https://grafana.github.io/dataplane/timeseries/) for information on time series data frames and how time and value fields are structured.
-- **Table** - This works only in a [Table panel]({{< relref "../../../panels-visualizations/visualizations/table" >}}).
-- **Heatmap** - Displays metrics of the Histogram type on a [Heatmap panel]({{< relref "../../../panels-visualizations/visualizations/heatmap" >}}) by converting cumulative histograms to regular ones and sorting the series by the bucket bound.
+- **Time series** - The default time series format. See [Time series kind formats](https://grafana.com/developers/dataplane/timeseries/) for information on time series data frames and how time and value fields are structured.
+- **Table** - This works only in a [Table panel](ref:table).
+- **Heatmap** - Displays metrics of the Histogram type on a [Heatmap panel](ref:heatmap) by converting cumulative histograms to regular ones and sorting the series by the bucket bound.
 
 ### Type
 
@@ -92,16 +118,16 @@ The **Type** setting sets the query type. These include:
 - **Range** - Returns a range vector consisting of a set of time series data containing a range of data points over time for each time series. You can choose lines, bars, points, stacked lines or stacked bars
 - **Instant** - Returns one data point per query and only the most recent point in the time range provided. The results can be shown in table format or as raw data. To depict instant query results in the time series panel, first add a field override, next add a property to the override named `Transform`, and finally select `Constant` from the **Transform** dropdown.
 
-For more information, refer to the [Time Series Transform option documentation]({{< relref "../../../panels-visualizations/visualizations/time-series#transform" >}}).
+For more information, refer to the [Time Series Transform option documentation](ref:time-series-transform).
 
 {{% admonition type="note" %}}
 Grafana modifies the request dates for queries to align them with the dynamically calculated step.
-This ensures a consistent display of metrics data, but it can result in a small gap of data at the right edge of a graph.
+This ensures a consistent display of metrics data and Prometheus requires this for caching results. But, aligning the range with the step can result in a small gap of data at the right edge of a graph or change the start date of the range. For example, a 15s step aligns the range to Unix time divisible by 15s and a 1w minstep aligns the range to the start of the week on a Thursday.
 {{% /admonition %}}
 
 ### Exemplars
 
-Toggle **Exemplars** to run a query that includes exemplars in the graph. Exemplars are unique to Prometheus. For more information see [Introduction to exemplars](https://grafana.com/docs/grafana/latest/fundamentals/exemplars/).
+Toggle **Exemplars** to run a query that includes exemplars in the graph. Exemplars are unique to Prometheus. For more information see [Introduction to exemplars](ref:exemplars).
 
 {{% admonition type="note" %}}
 There is no option to add exemplars with an **Instant** query type.
@@ -117,7 +143,7 @@ Click **Inspector** to get detailed statistics regarding your query. Inspector f
 
 **Builder mode** helps you build queries using a visual interface. This option is best for users who have limited or no previous experience working with Prometheus and PromQL.
 
-This video demonstrates how to use the visual Prometheus query builder available in Grafana v9.0:
+This video demonstrates how to use the visual Prometheus query builder:
 
 {{< vimeo 720004179 >}}
 
@@ -197,7 +223,7 @@ Once you are satisfied with your query, click **Run query**.
 The user interface (UI) also lets you select metrics, labels, filters and operations.
 
 You can write complex queries using the text editor with autocompletion features and syntax highlighting.
-It also contains a [Metrics browser]({{< relref "#metrics-browser" >}}) to further help you write queries.
+It also contains a [Metrics browser](#metrics-browser) to further help you write queries.
 
 ### Use autocomplete
 

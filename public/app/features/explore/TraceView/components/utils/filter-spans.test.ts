@@ -55,6 +55,7 @@ describe('filterSpans', () => {
     ],
     logs: [
       {
+        name: 'logName0',
         fields: [
           {
             key: 'logFieldKey0',
@@ -199,6 +200,7 @@ describe('filterSpans', () => {
         spans
       )
     ).toEqual(new Set([spanID2]));
+
     expect(filterSpans({ ...defaultFilters, tags: [{ ...defaultTagFilter, key: 'status.message' }] }, spans)).toEqual(
       new Set([spanID0, spanID2])
     );
@@ -315,6 +317,10 @@ describe('filterSpans', () => {
     ).toEqual(new Set([spanID0]));
   });
 
+  it('it should return logs have a name which matches the filter', () => {
+    expect(filterSpans({ ...defaultFilters, query: 'logName0' }, spans)).toEqual(new Set([spanID0]));
+  });
+
   it('should return no spans when logs is null', () => {
     const nullSpan = { ...span0, logs: null };
     expect(
@@ -330,10 +336,34 @@ describe('filterSpans', () => {
     ).toEqual(new Set([spanID0]));
     expect(
       filterSpans(
+        { ...defaultFilters, tags: [{ ...defaultTagFilter, key: 'tagKey1', value: 'tagValue1', operator: '=' }] },
+        spans
+      )
+    ).toEqual(new Set([spanID0]));
+    expect(
+      filterSpans(
         { ...defaultFilters, tags: [{ ...defaultTagFilter, key: 'tagKey1', value: 'tagValue1', operator: '!=' }] },
         spans
       )
     ).toEqual(new Set([spanID2]));
+    expect(
+      filterSpans(
+        { ...defaultFilters, tags: [{ ...defaultTagFilter, key: 'tagKey1', operator: '=~', value: 'tagValue' }] },
+        spans
+      )
+    ).toEqual(new Set([spanID0, spanID2]));
+    expect(
+      filterSpans(
+        { ...defaultFilters, tags: [{ ...defaultTagFilter, key: 'tagKey1', operator: '!~', value: 'tagValue1' }] },
+        spans
+      )
+    ).toEqual(new Set([spanID2]));
+    expect(
+      filterSpans(
+        { ...defaultFilters, tags: [{ ...defaultTagFilter, key: 'tagKey1', operator: '!~', value: 'tag' }] },
+        spans
+      )
+    ).toEqual(new Set([]));
   });
 
   it("should not return spans whose tags' kv.key match a filter but kv.value/operator does not match", () => {
@@ -465,6 +495,11 @@ describe('filterSpans', () => {
         spans
       )
     ).toEqual(new Set());
+
+    // query
+    expect(filterSpans({ ...defaultFilters, query: 'serviceName0' }, spans)).toEqual(new Set([spanID0]));
+    expect(filterSpans({ ...defaultFilters, query: 'tagKey1' }, spans)).toEqual(new Set([spanID0, spanID2]));
+    expect(filterSpans({ ...defaultFilters, query: 'does_not_exist' }, spans)).toEqual(new Set([]));
   });
 
   // Multiple
@@ -540,6 +575,38 @@ describe('filterSpans', () => {
         spans
       )
     ).toEqual(new Set([spanID2]));
+
+    // query + other
+    expect(filterSpans({ ...defaultFilters, serviceName: 'serviceName0', query: 'tag' }, spans)).toEqual(
+      new Set([spanID0])
+    );
+    expect(filterSpans({ ...defaultFilters, serviceName: 'serviceName0', query: 'tagKey2' }, spans)).toEqual(
+      new Set([])
+    );
+    expect(
+      filterSpans(
+        { ...defaultFilters, serviceName: 'serviceName2', spanName: 'operationName2', query: 'tagKey1' },
+        spans
+      )
+    ).toEqual(new Set([spanID2]));
+    expect(
+      filterSpans(
+        { ...defaultFilters, serviceName: 'serviceName2', spanName: 'operationName2', to: '6ms', query: 'kind2' },
+        spans
+      )
+    ).toEqual(new Set([spanID2]));
+    expect(
+      filterSpans(
+        {
+          ...defaultFilters,
+          serviceName: 'serviceName0',
+          spanName: 'operationName0',
+          from: '2ms',
+          query: 'logFieldKey1',
+        },
+        spans
+      )
+    ).toEqual(new Set([spanID0]));
 
     // all
     expect(

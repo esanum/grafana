@@ -1,10 +1,8 @@
-import { css } from '@emotion/css';
-import React from 'react';
+import { css, cx } from '@emotion/css';
 import { useLocation } from 'react-use';
 
 import { GrafanaTheme2, intervalToAbbreviatedDurationString } from '@grafana/data';
-import { Stack } from '@grafana/experimental';
-import { Icon, useStyles2 } from '@grafana/ui';
+import { Icon, Stack, useStyles2 } from '@grafana/ui';
 import alertDef from 'app/features/alerting/state/alertDef';
 import { Spacer } from 'app/features/alerting/unified/components/Spacer';
 import { fromCombinedRule, stringifyIdentifier } from 'app/features/alerting/unified/utils/rule-id';
@@ -14,11 +12,11 @@ import {
   getFirstActiveAt,
   isAlertingRule,
 } from 'app/features/alerting/unified/utils/rules';
-import { createUrl } from 'app/features/alerting/unified/utils/url';
+import { createRelativeUrl } from 'app/features/alerting/unified/utils/url';
 import { PromAlertingRuleState } from 'app/types/unified-alerting-dto';
 
 import { GRAFANA_RULES_SOURCE_NAME } from '../../../../features/alerting/unified/utils/datasource';
-import { AlertingRule, AlertInstanceTotalState, CombinedRuleWithLocation } from '../../../../types/unified-alerting';
+import { AlertInstanceTotalState, AlertingRule, CombinedRuleWithLocation } from '../../../../types/unified-alerting';
 import { AlertInstances } from '../AlertInstances';
 import { getStyles } from '../UnifiedAlertList';
 import { UnifiedAlertListOptions } from '../types';
@@ -28,6 +26,7 @@ type Props = {
   options: UnifiedAlertListOptions;
   handleInstancesLimit?: (limit: boolean) => void;
   limitInstances: boolean;
+  hideViewRuleLinkText?: boolean;
 };
 
 function getGrafanaInstancesTotal(totals: Partial<Record<AlertInstanceTotalState, number>>) {
@@ -36,7 +35,7 @@ function getGrafanaInstancesTotal(totals: Partial<Record<AlertInstanceTotalState
     .reduce((total, currentTotal) => total + currentTotal, 0);
 }
 
-const UngroupedModeView = ({ rules, options, handleInstancesLimit, limitInstances }: Props) => {
+const UngroupedModeView = ({ rules, options, handleInstancesLimit, limitInstances, hideViewRuleLinkText }: Props) => {
   const styles = useStyles2(getStyles);
   const stateStyle = useStyles2(getStateTagStyles);
   const { href: returnTo } = useLocation();
@@ -64,7 +63,7 @@ const UngroupedModeView = ({ rules, options, handleInstancesLimit, limitInstance
               ? getGrafanaInstancesTotal(ruleWithLocation.filteredInstanceTotals)
               : undefined;
 
-          const href = createUrl(
+          const href = createRelativeUrl(
             `/alerting/${encodeURIComponent(dataSourceName)}/${encodeURIComponent(strIndentifier)}/view`,
             { returnTo: returnTo ?? '' }
           );
@@ -83,17 +82,21 @@ const UngroupedModeView = ({ rules, options, handleInstancesLimit, limitInstance
                 </div>
                 <div className={styles.alertNameWrapper}>
                   <div className={styles.instanceDetails}>
-                    <Stack direction="row" gap={1} wrap={false}>
+                    <Stack direction="row" gap={1}>
                       <div className={styles.alertName} title={ruleWithLocation.name}>
                         {ruleWithLocation.name}
                       </div>
                       <Spacer />
                       {href && (
-                        <a href={href} target="__blank" className={styles.link} rel="noopener">
-                          <Stack alignItems="center" gap={1}>
-                            View alert rule
-                            <Icon name={'external-link-alt'} size="sm" />
-                          </Stack>
+                        <a
+                          href={href}
+                          target="__blank"
+                          className={styles.link}
+                          rel="noopener"
+                          aria-label="View alert rule"
+                        >
+                          <span className={cx({ [styles.hidden]: hideViewRuleLinkText })}>View alert rule</span>
+                          <Icon name={'external-link-alt'} size="sm" />
                         </a>
                       )}
                     </Stack>
@@ -115,6 +118,7 @@ const UngroupedModeView = ({ rules, options, handleInstancesLimit, limitInstance
                     </div>
                   </div>
                   <AlertInstances
+                    rule={ruleWithLocation}
                     alerts={alertingRule.alerts ?? []}
                     options={options}
                     grafanaTotalInstances={grafanaInstancesTotal}
@@ -142,7 +146,7 @@ const getStateTagStyles = (theme: GrafanaTheme2) => ({
 
     display: inline-block;
     color: white;
-    border-radius: ${theme.shape.borderRadius()};
+    border-radius: ${theme.shape.radius.default};
     font-size: ${theme.typography.bodySmall.fontSize};
     text-transform: capitalize;
     line-height: 1.2;

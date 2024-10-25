@@ -6,14 +6,17 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/grafana/grafana/pkg/infra/db"
 	"github.com/grafana/grafana/pkg/infra/log"
+	"github.com/grafana/grafana/pkg/services/accesscontrol/actest"
 	"github.com/grafana/grafana/pkg/services/apikey"
 	"github.com/grafana/grafana/pkg/services/org"
 	"github.com/grafana/grafana/pkg/services/serviceaccounts"
+	"github.com/grafana/grafana/pkg/tests/testsuite"
 )
 
 type FakeServiceAccountStore struct {
-	ExpectedServiceAccountID                *serviceaccounts.ServiceAccount
+	ExpectedServiceAccountID                int64
 	ExpectedServiceAccountDTO               *serviceaccounts.ServiceAccountDTO
 	ExpectedServiceAccountProfileDTO        *serviceaccounts.ServiceAccountProfileDTO
 	ExpectedSearchServiceAccountQueryResult *serviceaccounts.SearchOrgServiceAccountsResult
@@ -24,6 +27,8 @@ type FakeServiceAccountStore struct {
 	ExpectedBoolean                         bool
 	ExpectedError                           error
 }
+
+var _ store = (*FakeServiceAccountStore)(nil)
 
 func newServiceAccountStoreFake() *FakeServiceAccountStore {
 	return &FakeServiceAccountStore{}
@@ -36,12 +41,17 @@ func (f *FakeServiceAccountStore) RetrieveServiceAccount(ctx context.Context, or
 
 // RetrieveServiceAccountIdByName is a fake retrieving a service account id by name.
 func (f *FakeServiceAccountStore) RetrieveServiceAccountIdByName(ctx context.Context, orgID int64, name string) (int64, error) {
-	return f.ExpectedServiceAccountID.Id, f.ExpectedError
+	return f.ExpectedServiceAccountID, f.ExpectedError
 }
 
 // CreateServiceAccount is a fake creating a service account.
 func (f *FakeServiceAccountStore) CreateServiceAccount(ctx context.Context, orgID int64, saForm *serviceaccounts.CreateServiceAccountForm) (*serviceaccounts.ServiceAccountDTO, error) {
 	return f.ExpectedServiceAccountDTO, f.ExpectedError
+}
+
+// EnableServiceAccount implements store.
+func (f *FakeServiceAccountStore) EnableServiceAccount(ctx context.Context, orgID int64, serviceAccountID int64, enable bool) error {
+	return f.ExpectedError
 }
 
 // SearchOrgServiceAccounts is a fake searching for service accounts.
@@ -108,9 +118,22 @@ func (f *SecretsCheckerFake) CheckTokens(ctx context.Context) error {
 	return f.ExpectedError
 }
 
+func TestMain(m *testing.M) {
+	testsuite.Run(m)
+}
+
 func TestProvideServiceAccount_DeleteServiceAccount(t *testing.T) {
 	storeMock := newServiceAccountStoreFake()
-	svc := ServiceAccountsService{storeMock, log.New("test"), log.New("background.test"), &SecretsCheckerFake{}, false, 0}
+	acSvc := actest.FakeService{}
+	pSvc := &actest.FakePermissionsService{}
+	svc := ServiceAccountsService{
+		acService:         acSvc,
+		permissions:       pSvc,
+		store:             storeMock,
+		db:                db.InitTestDB(t),
+		log:               log.NewNopLogger(),
+		secretScanEnabled: false,
+	}
 	testOrgId := 1
 
 	t.Run("should create service account", func(t *testing.T) {

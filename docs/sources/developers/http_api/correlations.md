@@ -1,7 +1,7 @@
 ---
 aliases:
   - ../../http_api/correlations/
-canonical: /docs/grafana/latest/developers/http_api/correlation/
+canonical: /docs/grafana/latest/developers/http_api/correlations/
 description: Grafana Correlations HTTP API
 keywords:
   - grafana
@@ -38,8 +38,8 @@ Authorization: Bearer eyJrIjoiT0tTcG1pUlY2RnVKZTFVaDFsNFZXdE9ZWmNrMkZYbk
 	"targetUID": "PDDA8E780A17E7EF1",
 	"label": "My Label",
 	"description": "Logs to Traces",
+  "type": "query",
   "config": {
-    "type": "query",
     "field": "message",
     "target": {},
   }
@@ -65,8 +65,8 @@ Content-Type: application/json
     "sourceUID": "uyBf2637k",
     "targetUID": "PDDA8E780A17E7EF1",
     "uid": "50xhMlg9k",
+    "type": "query",
     "config": {
-      "type": "query",
       "field": "message",
       "target": {},
     }
@@ -153,8 +153,8 @@ Content-Type: application/json
     "sourceUID": "uyBf2637k",
     "targetUID": "PDDA8E780A17E7EF1",
     "uid": "J6gn7d31L",
+    "type": "query",
     "config": {
-			"type": "query",
 			"field": "message",
 			"target": {}
 		}
@@ -196,8 +196,9 @@ Content-Type: application/json
   "sourceUID": "uyBf2637k",
   "targetUID": "PDDA8E780A17E7EF1",
   "uid": "J6gn7d31L",
+  "provisioned": false,
+  "type": "query",
   "config": {
-    "type": "query",
     "field": "message",
     "target": {},
   }
@@ -237,8 +238,9 @@ Content-Type: application/json
     "sourceUID": "uyBf2637k",
     "targetUID": "PDDA8E780A17E7EF1",
     "uid": "J6gn7d31L",
+    "provisioned": false,
+    "type": "query",
     "config": {
-      "type": "query",
       "field": "message",
       "target": {},
     }
@@ -249,8 +251,9 @@ Content-Type: application/json
     "sourceUID": "uyBf2637k",
     "targetUID": "P15396BDD62B2BE29",
     "uid": "uWCpURgVk",
+    "provisioned": false,
+    "type": "query",
     "config": {
-      "type": "query",
       "field": "message",
       "target": {},
     }
@@ -297,8 +300,9 @@ Content-Type: application/json
     "sourceUID": "uyBf2637k",
     "targetUID": "PDDA8E780A17E7EF1",
     "uid": "J6gn7d31L",
+    "provisioned": false,
+    "type": "query",
     "config": {
-      "type": "query",
       "field": "message",
       "target": {},
     }
@@ -309,8 +313,9 @@ Content-Type: application/json
     "sourceUID": "PDDA8E780A17E7EF1",
     "targetUID": "P15396BDD62B2BE29",
     "uid": "uWCpURgVk",
+    "provisioned": false,
+    "type": "query",
     "config": {
-      "type": "query",
       "field": "message",
       "target": {},
     }

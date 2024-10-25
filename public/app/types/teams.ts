@@ -1,13 +1,21 @@
-import { Team as TeamDTO } from '@grafana/schema/src/raw/team/x/team_types.gen';
-
+import { Role } from './accessControl';
 import { TeamPermissionLevel } from './acl';
 
-// The team resource
-export { TeamDTO };
+export interface TeamDTO {
+  /**
+   * Email of the team.
+   */
+  email?: string;
+  /**
+   * Name of the team.
+   */
+  name: string;
+}
 
 // This is the team resource with permissions and metadata expanded
 export interface Team {
   id: number; // TODO switch to UUID
+  uid: string; // Prefer UUID
 
   /**
    * AccessControl metadata associated with a given resource.
@@ -37,6 +45,10 @@ export interface Team {
    * TODO - it seems it's a team_member.permission, unlikely it should belong to the team kind
    */
   permission: TeamPermissionLevel;
+  /**
+   * RBAC roles assigned to the team.
+   */
+  roles?: Role[];
 }
 
 export interface TeamMember {
@@ -63,6 +75,8 @@ export interface TeamsState {
   noTeams: boolean;
   totalPages: number;
   hasFetched: boolean;
+  sort?: string;
+  rolesLoading?: boolean;
 }
 
 export interface TeamState {

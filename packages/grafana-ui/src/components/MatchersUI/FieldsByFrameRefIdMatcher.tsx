@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 
 import { DataFrame, getFrameDisplayName, FieldMatcherID, fieldMatchers, SelectableValue } from '@grafana/data';
 
@@ -56,7 +56,7 @@ export function RefIDPicker({ value, data, onChange, placeholder }: Props) {
 
   const onFilterChange = useCallback(
     (v: SelectableValue<string>) => {
-      onChange(v.value!);
+      onChange(v?.value!);
     },
     [onChange]
   );

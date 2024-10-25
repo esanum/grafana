@@ -36,6 +36,10 @@ func (f inMemoryFS) Files() ([]string, error) {
 	return fps, nil
 }
 
+func (f inMemoryFS) Rel(_ string) (string, error) {
+	return "", nil
+}
+
 func (f inMemoryFS) Open(fn string) (fs.File, error) {
 	if _, ok := f.files[fn]; !ok {
 		return nil, ErrFileNotExist
@@ -79,4 +83,4 @@ func (f inMemoryFileInfo) Size() int64        { return f.size }
 func (f inMemoryFileInfo) Mode() os.FileMode  { return 0444 } // Read for all
 func (f inMemoryFileInfo) ModTime() time.Time { return time.Time{} }
 func (f inMemoryFileInfo) IsDir() bool        { return false }
-func (f inMemoryFileInfo) Sys() interface{}   { return nil }
+func (f inMemoryFileInfo) Sys() any           { return nil }

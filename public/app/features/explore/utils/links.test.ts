@@ -105,8 +105,12 @@ describe('explore links utils', () => {
       );
       expect(links[0].title).toBe('test_ds');
 
+      const preventDefault = jest.fn();
+
       if (links[0].onClick) {
-        links[0].onClick({});
+        links[0].onClick({
+          preventDefault,
+        });
       }
 
       expect(splitfn).toBeCalledWith({
@@ -119,6 +123,8 @@ describe('explore links utils', () => {
           },
         },
       });
+
+      expect(preventDefault).toBeCalled();
 
       expect(reportInteraction).toBeCalledWith('grafana_data_link_clicked', {
         app: CoreApp.Explore,
@@ -275,6 +281,8 @@ describe('explore links utils', () => {
           query: { query: 'http_requests{app=${application} env=${environment}}' },
           datasourceUid: 'uid_1',
           datasourceName: 'test_ds',
+        },
+        meta: {
           transformations: [
             { type: SupportedTransformationType.Logfmt },
             { type: SupportedTransformationType.Regex, expression: 'host=(dev|prod)', mapValue: 'environment' },
@@ -324,6 +332,8 @@ describe('explore links utils', () => {
           query: { query: 'http_requests{env=${msg}}' },
           datasourceUid: 'uid_1',
           datasourceName: 'test_ds',
+        },
+        meta: {
           transformations: [
             { type: SupportedTransformationType.Regex, expression: 'fieldA=(asparagus|broccoli)' },
             { type: SupportedTransformationType.Regex, expression: 'fieldB=(apple|banana)' },
@@ -366,6 +376,8 @@ describe('explore links utils', () => {
           query: { query: 'http_requests{env=${msg}}' },
           datasourceUid: 'uid_1',
           datasourceName: 'test_ds',
+        },
+        meta: {
           transformations: [
             {
               type: SupportedTransformationType.Regex,
@@ -421,8 +433,8 @@ describe('explore links utils', () => {
           query: { query: 'http_requests{app=${application} isOnline=${online}}' },
           datasourceUid: 'uid_1',
           datasourceName: 'test_ds',
-          transformations: [{ type: SupportedTransformationType.Logfmt }],
         },
+        meta: { transformations: [{ type: SupportedTransformationType.Logfmt }] },
       };
 
       const { field, range, dataFrame } = setup(transformationLink, true, {
@@ -460,8 +472,8 @@ describe('explore links utils', () => {
           query: { query: 'http_requests{app=${application}}' },
           datasourceUid: 'uid_1',
           datasourceName: 'test_ds',
-          transformations: [{ type: SupportedTransformationType.Logfmt, field: 'fieldNamedInTransformation' }],
         },
+        meta: { transformations: [{ type: SupportedTransformationType.Logfmt, field: 'fieldNamedInTransformation' }] },
       };
 
       // fieldWithLink has the transformation, but the transformation has defined fieldNamedInTransformation as its field to transform
@@ -512,6 +524,8 @@ describe('explore links utils', () => {
           query: { query: 'http_requests{app=${application} env=${environment}}' },
           datasourceUid: 'uid_1',
           datasourceName: 'test_ds',
+        },
+        meta: {
           transformations: [
             {
               type: SupportedTransformationType.Regex,
@@ -592,6 +606,8 @@ describe('explore links utils', () => {
           query: { query: 'http_requests{app=${application} env=${diffVar}}' },
           datasourceUid: 'uid_1',
           datasourceName: 'test_ds',
+        },
+        meta: {
           transformations: [{ type: SupportedTransformationType.Logfmt }],
         },
       };
@@ -617,6 +633,8 @@ describe('explore links utils', () => {
           query: { query: 'http_requests{app=test}' },
           datasourceUid: 'uid_1',
           datasourceName: 'test_ds',
+        },
+        meta: {
           transformations: [{ type: SupportedTransformationType.Logfmt }],
         },
       };
@@ -713,10 +731,10 @@ function setup(
       };
     },
     getAnchorInfo(link) {
-      return { ...link };
+      return { ...link, href: link.url ?? '' };
     },
     getLinkUrl(link) {
-      return link.url;
+      return link.url ?? '';
     },
   });
 

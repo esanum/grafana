@@ -1,13 +1,21 @@
 import { render, screen } from '@testing-library/react';
-import React from 'react';
-import { AutoSizerProps } from 'react-virtualized-auto-sizer';
+import { Props as AutoSizerProps } from 'react-virtualized-auto-sizer';
 import { TestProvider } from 'test/helpers/TestProvider';
 
-import { DataSourceApi, LoadingState, CoreApp, createTheme, EventBusSrv, PluginExtensionTypes } from '@grafana/data';
+import {
+  CoreApp,
+  createTheme,
+  DataSourceApi,
+  EventBusSrv,
+  LoadingState,
+  PluginExtensionTypes,
+  store,
+} from '@grafana/data';
 import { selectors } from '@grafana/e2e-selectors';
-import { getPluginLinkExtensions } from '@grafana/runtime';
+import { usePluginLinks } from '@grafana/runtime';
 import { configureStore } from 'app/store/configureStore';
 
+import { ContentOutlineContextProvider } from './ContentOutline/ContentOutlineContext';
 import { Explore, Props } from './Explore';
 import { initialExploreState } from './state/main';
 import { scanStopAction } from './state/query';
@@ -50,6 +58,8 @@ const makeEmptyQueryResponse = (loadingState: LoadingState) => {
 };
 
 const dummyProps: Props = {
+  setShowQueryInspector: (value: boolean) => {},
+  showQueryInspector: false,
   logsResult: undefined,
   changeSize: jest.fn(),
   datasourceInstance: {
@@ -72,12 +82,7 @@ const dummyProps: Props = {
   isLive: false,
   syncedTimes: false,
   updateTimeRange: jest.fn(),
-  makeAbsoluteTime: jest.fn(),
   graphResult: [],
-  absoluteRange: {
-    from: 0,
-    to: 0,
-  },
   timeZone: 'UTC',
   queryResponse: makeEmptyQueryResponse(LoadingState.NotStarted),
   addQueryRow: jest.fn(),
@@ -96,6 +101,8 @@ const dummyProps: Props = {
   showLogsSample: false,
   logsSample: { enabled: false },
   setSupplementaryQueryEnabled: jest.fn(),
+  correlationEditorDetails: undefined,
+  correlationEditorHelperData: undefined,
 };
 
 jest.mock('@grafana/runtime/src/services/dataSourceSrv', () => {
@@ -110,21 +117,28 @@ jest.mock('@grafana/runtime/src/services/dataSourceSrv', () => {
 
 jest.mock('app/core/core', () => ({
   contextSrv: {
-    hasAccess: () => true,
+    hasPermission: () => true,
+    getValidIntervals: (defaultIntervals: string[]) => defaultIntervals,
   },
 }));
 
 jest.mock('@grafana/runtime', () => ({
   ...jest.requireActual('@grafana/runtime'),
-  getPluginLinkExtensions: jest.fn(() => ({ extensions: [] })),
+  usePluginLinks: jest.fn(() => ({ links: [] })),
 }));
 
 // for the AutoSizer component to have a width
 jest.mock('react-virtualized-auto-sizer', () => {
-  return ({ children }: AutoSizerProps) => children({ height: 1, width: 1 });
+  return ({ children }: AutoSizerProps) =>
+    children({
+      height: 1,
+      scaledHeight: 1,
+      scaledWidth: 1,
+      width: 1,
+    });
 });
 
-const getPluginLinkExtensionsMock = jest.mocked(getPluginLinkExtensions);
+const usePluginLinksMock = jest.mocked(usePluginLinks);
 
 const setup = (overrideProps?: Partial<Props>) => {
   const store = configureStore({
@@ -139,7 +153,9 @@ const setup = (overrideProps?: Partial<Props>) => {
 
   return render(
     <TestProvider store={store}>
-      <Explore {...exploreProps} />
+      <ContentOutlineContextProvider>
+        <Explore {...exploreProps} />
+      </ContentOutlineContextProvider>
     </TestProvider>
   );
 };
@@ -164,8 +180,8 @@ describe('Explore', () => {
   });
 
   it('should render toolbar extension point if extensions is available', async () => {
-    getPluginLinkExtensionsMock.mockReturnValueOnce({
-      extensions: [
+    usePluginLinksMock.mockReturnValueOnce({
+      links: [
         {
           id: '1',
           pluginId: 'grafana',
@@ -183,6 +199,7 @@ describe('Explore', () => {
           onClick: () => {},
         },
       ],
+      isLoading: false,
     });
 
     setup({ queryResponse: makeEmptyQueryResponse(LoadingState.Done) });
@@ -210,6 +227,16 @@ describe('Explore', () => {
       const dataSourcePicker = await screen.findByTestId(selectors.components.DataSourcePicker.container);
 
       expect(dataSourcePicker).toBeInTheDocument();
+    });
+  });
+
+  describe('Content Outline', () => {
+    it('should retrieve the last visible state from local storage', async () => {
+      const getBoolMock = jest.spyOn(store, 'getBool').mockReturnValue(false);
+      setup();
+      const showContentOutlineButton = screen.queryByRole('button', { name: 'Collapse outline' });
+      expect(showContentOutlineButton).not.toBeInTheDocument();
+      getBoolMock.mockRestore();
     });
   });
 });

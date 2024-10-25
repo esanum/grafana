@@ -2,7 +2,6 @@ package test
 
 import (
 	"fmt"
-	"os"
 	"testing"
 	"time"
 
@@ -13,7 +12,7 @@ import (
 
 	"github.com/grafana/grafana/pkg/infra/log"
 	"github.com/grafana/grafana/pkg/services/accesscontrol"
-	"github.com/grafana/grafana/pkg/services/dashboards"
+	"github.com/grafana/grafana/pkg/services/featuremgmt"
 	"github.com/grafana/grafana/pkg/services/org"
 	"github.com/grafana/grafana/pkg/services/sqlstore/migrations"
 	acmig "github.com/grafana/grafana/pkg/services/sqlstore/migrations/accesscontrol"
@@ -45,6 +44,7 @@ var (
 	users = []user.User{
 		{
 			ID:      1,
+			UID:     "u1",
 			Email:   "viewer1@example.org",
 			Name:    "viewer1",
 			Login:   "viewer1",
@@ -54,6 +54,7 @@ var (
 		},
 		{
 			ID:      2,
+			UID:     "u2",
 			Email:   "viewer2@example.org",
 			Name:    "viewer2",
 			Login:   "viewer2",
@@ -63,6 +64,7 @@ var (
 		},
 		{
 			ID:      3,
+			UID:     "u3",
 			Email:   "editor1@example.org",
 			Name:    "editor1",
 			Login:   "editor1",
@@ -72,6 +74,7 @@ var (
 		},
 		{
 			ID:      4,
+			UID:     "u4",
 			Email:   "admin1@example.org",
 			Name:    "admin1",
 			Login:   "admin1",
@@ -81,6 +84,7 @@ var (
 		},
 		{
 			ID:      5,
+			UID:     "u5",
 			Email:   "editor2@example.org",
 			Name:    "editor2",
 			Login:   "editor2",
@@ -97,37 +101,6 @@ func convertToRawPermissions(permissions []accesscontrol.Permission) []rawPermis
 		raw[i] = rawPermission{Action: p.Action, Scope: p.Scope}
 	}
 	return raw
-}
-
-func getDBType() string {
-	dbType := migrator.SQLite
-
-	// environment variable present for test db?
-	if db, present := os.LookupEnv("GRAFANA_TEST_DB"); present {
-		dbType = db
-	}
-	return dbType
-}
-
-func getTestDB(t *testing.T, dbType string) sqlutil.TestDB {
-	switch dbType {
-	case "mysql":
-		return sqlutil.MySQLTestDB()
-	case "postgres":
-		return sqlutil.PostgresTestDB()
-	default:
-		f, err := os.CreateTemp(".", "grafana-test-db-")
-		require.NoError(t, err)
-		t.Cleanup(func() {
-			err := os.Remove(f.Name())
-			require.NoError(t, err)
-		})
-
-		return sqlutil.TestDB{
-			DriverName: "sqlite3",
-			ConnStr:    f.Name(),
-		}
-	}
 }
 
 func TestMigrations(t *testing.T) {
@@ -152,9 +125,8 @@ func TestMigrations(t *testing.T) {
 		{
 			desc: "with editors can admin",
 			config: &setting.Cfg{
-				EditorsCanAdmin:        true,
-				IsFeatureToggleEnabled: func(key string) bool { return key == "accesscontrol" },
-				Raw:                    ini.Empty(),
+				EditorsCanAdmin: true,
+				Raw:             ini.Empty(),
 			},
 			expectedRolePerms: map[string][]rawPermission{
 				"managed:users:1:permissions": {{Action: "teams:read", Scope: team1Scope}},
@@ -181,10 +153,8 @@ func TestMigrations(t *testing.T) {
 		},
 		{
 			desc: "without editors can admin",
-			config: &setting.Cfg{
-				IsFeatureToggleEnabled: func(key string) bool { return key == "accesscontrol" },
-				Raw:                    ini.Empty(),
-			},
+			// nolint:staticcheck
+			config: setting.NewCfgWithFeatures(featuremgmt.WithFeatures("accesscontrol").IsEnabledGlobally),
 			expectedRolePerms: map[string][]rawPermission{
 				"managed:users:1:permissions": {{Action: "teams:read", Scope: team1Scope}},
 				"managed:users:2:permissions": {{Action: "teams:read", Scope: team1Scope}},
@@ -250,11 +220,20 @@ func TestMigrations(t *testing.T) {
 
 func setupTestDB(t *testing.T) *xorm.Engine {
 	t.Helper()
-	dbType := getDBType()
-	testDB := getTestDB(t, dbType)
+	dbType := sqlutil.GetTestDBType()
+	testDB, err := sqlutil.GetTestDB(dbType)
+	require.NoError(t, err)
+
+	t.Cleanup(testDB.Cleanup)
 
 	x, err := xorm.NewEngine(testDB.DriverName, testDB.ConnStr)
 	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		if err := x.Close(); err != nil {
+			fmt.Printf("failed to close xorm engine: %v", err)
+		}
+	})
 
 	err = migrator.NewDialect(x.DriverName()).CleanDB(x)
 	require.NoError(t, err)
@@ -348,7 +327,7 @@ func setupTeams(t *testing.T, x *xorm.Engine) {
 			TeamID:     1,
 			UserID:     1,
 			External:   false,
-			Permission: 0,
+			Permission: team.PermissionTypeMember,
 			Created:    now,
 			Updated:    now,
 		},
@@ -358,7 +337,7 @@ func setupTeams(t *testing.T, x *xorm.Engine) {
 			TeamID:     1,
 			UserID:     2,
 			External:   false,
-			Permission: dashboards.PERMISSION_ADMIN,
+			Permission: team.PermissionTypeAdmin,
 			Created:    now,
 			Updated:    now,
 		},
@@ -368,7 +347,7 @@ func setupTeams(t *testing.T, x *xorm.Engine) {
 			TeamID:     1,
 			UserID:     3,
 			External:   false,
-			Permission: dashboards.PERMISSION_ADMIN,
+			Permission: team.PermissionTypeAdmin,
 			Created:    now,
 			Updated:    now,
 		},
@@ -378,7 +357,7 @@ func setupTeams(t *testing.T, x *xorm.Engine) {
 			TeamID:     1,
 			UserID:     4,
 			External:   false,
-			Permission: dashboards.PERMISSION_ADMIN,
+			Permission: team.PermissionTypeAdmin,
 			Created:    now,
 			Updated:    now,
 		},
@@ -388,7 +367,7 @@ func setupTeams(t *testing.T, x *xorm.Engine) {
 			TeamID:     2,
 			UserID:     5,
 			External:   false,
-			Permission: 0,
+			Permission: team.PermissionTypeMember,
 			Created:    now,
 			Updated:    now,
 		},

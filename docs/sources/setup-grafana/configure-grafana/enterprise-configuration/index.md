@@ -23,19 +23,11 @@ Defaults to `<paths.data>/license.jwt`.
 
 ### license_text
 
-{{% admonition type="note" %}}
-Available in Grafana Enterprise version 7.4 and later.
-{{% /admonition %}}
-
 When set to the text representation (i.e. content of the license file)
 of the license, Grafana will evaluate and apply the given license to
 the instance.
 
 ### auto_refresh_license
-
-{{% admonition type="note" %}}
-Available in Grafana Enterprise version 7.4 and later.
-{{% /admonition %}}
 
 When enabled, Grafana will send the license and usage statistics to
 the license issuer. If the license has been updated on the issuer's
@@ -44,10 +36,6 @@ your Grafana instance will be updated with the new terms
 automatically. Defaults to `true`.
 
 ### license_validation_type
-
-{{% admonition type="note" %}}
-Available in Grafana Enterprise version 8.3 and later.
-{{% /admonition %}}
 
 When set to `aws`, Grafana will validate its license status with Amazon Web Services (AWS) instead of with Grafana Labs. Only use this setting if you purchased an Enterprise license from AWS Marketplace. Defaults to empty, which means that by default Grafana Enterprise will validate using a license issued by Grafana Labs. For details about licenses issued by AWS, refer to [Activate a Grafana Enterprise license purchased through AWS Marketplace]({{< relref "../../../administration/enterprise-licensing/activate-aws-marketplace-license" >}}).
 
@@ -81,6 +69,10 @@ Set to complete URL to override fav icon (icon shown in browser tab).
 ### apple_touch_icon
 
 Set to complete URL to override Apple/iOS icon.
+
+### hide_edition
+
+Set to `true` to remove the Grafana edition from appearing in the footer.
 
 ### footer_links
 
@@ -173,6 +165,10 @@ Name of the TrueType font file with bold style.
 ### font_italic
 
 Name of the TrueType font file with italic style.
+
+### max_retries_per_panel
+
+Maximum number of panel rendering request retries before returning an error. To disable the retry feature, enter `0`. This is available in public preview and requires the `reportingRetries` feature toggle.
 
 ## [auditing]
 
@@ -306,7 +302,15 @@ List of comma- or space-separated organizations. Each user must be a member of a
 
 ### org_mapping
 
-List of comma- or space-separated Organization:OrgId:Role mappings. Organization can be `*` meaning "All users". Role is optional and can have the following values: `Viewer`, `Editor` or `Admin`.
+List of comma- or space-separated Organization:OrgId:Role mappings. Organization can be `*` meaning "All users". Role is optional and can have the following values: `Admin`, `Editor` ,`Viewer` or `None`.
+
+### role_values_none
+
+List of comma- or space-separated roles that will be mapped to the None role.
+
+### role_values_viewer
+
+List of comma- or space-separated roles that will be mapped to the Viewer role.
 
 ### role_values_editor
 
@@ -352,10 +356,6 @@ New duration for renewed tokens. Vault may be configured to ignore this value an
 
 ## [security.egress]
 
-{{% admonition type="note" %}}
-Available in Grafana Enterprise version 7.4 and later.
-{{% /admonition %}}
-
 Security egress makes it possible to control outgoing traffic from the Grafana server.
 
 ### host_deny_list
@@ -381,10 +381,6 @@ A list of cookies that are stripped from the outgoing data source and alerting r
 Encryption algorithm used to encrypt secrets stored in the database and cookies. Possible values are `aes-cfb` (default) and `aes-gcm`. AES-CFB stands for _Advanced Encryption Standard_ in _cipher feedback_ mode, and AES-GCM stands for _Advanced Encryption Standard_ in _Galois/Counter Mode_.
 
 ## [caching]
-
-{{% admonition type="note" %}}
-Available in Grafana Enterprise version 7.5 and later.
-{{% /admonition %}}
 
 When query caching is enabled, Grafana can temporarily store the results of data source queries and serve cached responses to similar requests.
 
@@ -488,7 +484,7 @@ Disabling the maximum is not recommended in production environments.
 
 ### url
 
-The full Redis URL of your Redis server. For example: `redis://username:password@localhost:6379`. To enable TLS, use the `redis` scheme.
+The full Redis URL of your Redis server. For example: `redis://username:password@localhost:6379`. To enable TLS, use the `rediss` scheme.
 
 The default is `"redis://localhost:6379"`.
 
@@ -502,7 +498,7 @@ If you have specify `cluster`, the value for `url` is ignored.
 {{% /admonition %}}
 
 {{% admonition type="note" %}}
-You can enable TLS for cluster mode using the `redis` scheme in Grafana Enterprise v8.5 and later versions.
+You can enable TLS for cluster mode using the `rediss` scheme in Grafana Enterprise v8.5 and later versions.
 {{% /admonition %}}
 
 ### prefix
@@ -518,6 +514,34 @@ The default is `"grafana"`.
 A space-separated list of memcached servers. Example: `memcached-server-1:11211 memcached-server-2:11212 memcached-server-3:11211`. Or if there's only one server: `memcached-server:11211`.
 
 The default is `"localhost:11211"`.
+
+{{% admonition type="note" %}}
+The following memcached configuration requires the `tlsMemcached` feature toggle.
+{{% /admonition %}}
+
+### tls_enabled
+
+Enables TLS authentication for memcached. Defaults to `false`.
+
+### tls_cert_path
+
+Path to the client certificate, which will be used for authenticating with the server. Also requires the key path to be configured.
+
+### tls_key_path
+
+Path to the key for the client certificate. Also requires the client certificate to be configured.
+
+### tls_ca_path
+
+Path to the CA certificates to validate the server certificate against. If not set, the host's root CA certificates are used.
+
+### tls_server_name
+
+Override the expected name on the server certificate.
+
+### connection_timeout
+
+Timeout for the memcached client to connect to memcached. Defaults to `0`, which uses the memcached client default timeout per connection scheme.
 
 ## [recorded_queries]
 

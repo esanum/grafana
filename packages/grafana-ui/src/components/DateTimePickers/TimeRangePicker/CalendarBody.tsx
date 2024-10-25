@@ -1,18 +1,29 @@
 import { css } from '@emotion/css';
-import React, { useCallback } from 'react';
+import { useCallback } from 'react';
 import Calendar from 'react-calendar';
+import { CalendarType } from 'react-calendar/dist/cjs/shared/types';
 
-import { GrafanaTheme2, dateTime, dateTimeParse, DateTime, TimeZone } from '@grafana/data';
+import { GrafanaTheme2, dateTimeParse, DateTime, TimeZone } from '@grafana/data';
 
 import { useStyles2 } from '../../../themes';
+import { t } from '../../../utils/i18n';
 import { Icon } from '../../Icon/Icon';
+import { getWeekStart, WeekStart } from '../WeekStartPicker';
+import { adjustDateForReactCalendar } from '../utils/adjustDateForReactCalendar';
 
 import { TimePickerCalendarProps } from './TimePickerCalendar';
 
-export function Body({ onChange, from, to, timeZone }: TimePickerCalendarProps) {
-  const value = inputToValue(from, to);
+const weekStartMap: Record<WeekStart, CalendarType> = {
+  saturday: 'islamic',
+  sunday: 'gregory',
+  monday: 'iso8601',
+};
+
+export function Body({ onChange, from, to, timeZone, weekStart }: TimePickerCalendarProps) {
+  const value = inputToValue(from, to, new Date(), timeZone);
   const onCalendarChange = useOnCalendarChange(onChange, timeZone);
   const styles = useStyles2(getBodyStyles);
+  const weekStartValue = getWeekStart(weekStart);
 
   return (
     <Calendar
@@ -23,25 +34,37 @@ export function Body({ onChange, from, to, timeZone }: TimePickerCalendarProps) 
       tileClassName={styles.title}
       value={value}
       nextLabel={<Icon name="angle-right" />}
+      nextAriaLabel={t('time-picker.calendar.next-month', 'Next month')}
       prevLabel={<Icon name="angle-left" />}
+      prevAriaLabel={t('time-picker.calendar.previous-month', 'Previous month')}
       onChange={onCalendarChange}
       locale="en"
+      calendarType={weekStartMap[weekStartValue]}
     />
   );
 }
 
 Body.displayName = 'Body';
 
-export function inputToValue(from: DateTime, to: DateTime, invalidDateDefault: Date = new Date()): [Date, Date] {
-  const fromAsDate = from.toDate();
-  const toAsDate = to.toDate();
-  const fromAsValidDate = dateTime(fromAsDate).isValid() ? fromAsDate : invalidDateDefault;
-  const toAsValidDate = dateTime(toAsDate).isValid() ? toAsDate : invalidDateDefault;
+export function inputToValue(
+  from: DateTime,
+  to: DateTime,
+  invalidDateDefault: Date = new Date(),
+  timezone?: string
+): [Date, Date] {
+  let fromAsDate = from.isValid() ? from.toDate() : invalidDateDefault;
+  let toAsDate = to.isValid() ? to.toDate() : invalidDateDefault;
 
-  if (fromAsValidDate > toAsValidDate) {
-    return [toAsValidDate, fromAsValidDate];
+  if (timezone) {
+    fromAsDate = adjustDateForReactCalendar(fromAsDate, timezone);
+    toAsDate = adjustDateForReactCalendar(toAsDate, timezone);
   }
-  return [fromAsValidDate, toAsValidDate];
+
+  if (fromAsDate > toAsDate) {
+    return [toAsDate, fromAsDate];
+  }
+
+  return [fromAsDate, toAsDate];
 }
 
 function useOnCalendarChange(onChange: (from: DateTime, to: DateTime) => void, timeZone?: TimeZone) {
@@ -77,7 +100,7 @@ export const getBodyStyles = (theme: GrafanaTheme2) => {
       fontSize: theme.typography.size.md,
       border: '1px solid transparent',
 
-      '&:hover': {
+      '&:hover, &:focus': {
         position: 'relative',
       },
 
@@ -135,7 +158,6 @@ export const getBodyStyles = (theme: GrafanaTheme2) => {
         color: theme.colors.primary.contrastText,
         fontWeight: theme.typography.fontWeightMedium,
         background: theme.colors.primary.main,
-        boxShadow: 'none',
         border: '0px',
       },
 

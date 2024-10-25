@@ -180,7 +180,7 @@ class LightColors implements ThemeColorsBase<Partial<ThemeRichColor>> {
   text = {
     primary: `rgba(${this.blackBase}, 1)`,
     secondary: `rgba(${this.blackBase}, 0.75)`,
-    disabled: `rgba(${this.blackBase}, 0.50)`,
+    disabled: `rgba(${this.blackBase}, 0.64)`,
     link: this.primary.text,
     maxContrast: palette.black,
   };
@@ -293,6 +293,9 @@ export function createColors(colors: ThemeColorsInput): ThemeColors {
     }
     if (!color.contrastText) {
       color.contrastText = getContrastText(color.main);
+    }
+    if (!color.borderTransparent) {
+      color.borderTransparent = alpha(color.border, 0.25);
     }
     return color as ThemeRichColor;
   };

@@ -22,6 +22,10 @@ There are multiple ways to install Grafana: using the Grafana Labs APT repositor
 If you install via the `.deb` package or `.tar.gz` file, then you must manually update Grafana for each new version.
 {{% /admonition %}}
 
+The following video demonstrates how to install Grafana on Debian and Ubuntu as outlined in this document:
+
+{{< youtube id="_Zk_XQSjF_Q" >}}
+
 ## Install from APT repository
 
 If you install from the APT repository, Grafana automatically updates when you run `apt-get update`.
@@ -39,24 +43,29 @@ Grafana Enterprise is the recommended and default edition. It is available for f
 
 Complete the following steps to install Grafana from the APT repository:
 
-1. To install required packages and download the Grafana repository signing key, run the following commands:
+1. Install the prerequisite packages:
 
    ```bash
-   sudo apt-get install -y apt-transport-https
-   sudo apt-get install -y software-properties-common wget
-   sudo wget -q -O /usr/share/keyrings/grafana.key https://apt.grafana.com/gpg.key
+   sudo apt-get install -y apt-transport-https software-properties-common wget
+   ```
+
+1. Import the GPG key:
+
+   ```bash
+   sudo mkdir -p /etc/apt/keyrings/
+   wget -q -O - https://apt.grafana.com/gpg.key | gpg --dearmor | sudo tee /etc/apt/keyrings/grafana.gpg > /dev/null
    ```
 
 1. To add a repository for stable releases, run the following command:
 
    ```bash
-   echo "deb [signed-by=/usr/share/keyrings/grafana.key] https://apt.grafana.com stable main" | sudo tee -a /etc/apt/sources.list.d/grafana.list
+   echo "deb [signed-by=/etc/apt/keyrings/grafana.gpg] https://apt.grafana.com stable main" | sudo tee -a /etc/apt/sources.list.d/grafana.list
    ```
 
 1. To add a repository for beta releases, run the following command:
 
    ```bash
-   echo "deb [signed-by=/usr/share/keyrings/grafana.key] https://apt.grafana.com beta main" | sudo tee -a /etc/apt/sources.list.d/grafana.list
+   echo "deb [signed-by=/etc/apt/keyrings/grafana.gpg] https://apt.grafana.com beta main" | sudo tee -a /etc/apt/sources.list.d/grafana.list
    ```
 
 1. Run the following command to update the list of available packages:
@@ -102,7 +111,7 @@ Complete any of the following steps to uninstall Grafana.
 
 To uninstall Grafana, run the following commands in a terminal window:
 
-1. If you configured Grafana to run with systemd, stop the systemd servivce for Grafana server:
+1. If you configured Grafana to run with systemd, stop the systemd service for Grafana server:
 
    ```shell
    sudo systemctl stop grafana-server

@@ -1,9 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import React, { createRef } from 'react';
 import { Provider } from 'react-redux';
-
-import { getDefaultTimeRange, LoadingState } from '@grafana/data';
 
 import { configureStore } from '../../../store/configureStore';
 
@@ -19,22 +16,10 @@ jest.mock('@grafana/runtime', () => {
 
 function renderTraceViewContainer(frames = [frameOld]) {
   const store = configureStore();
-  const mockPanelData = {
-    state: LoadingState.Done,
-    series: [],
-    timeRange: getDefaultTimeRange(),
-  };
-  const topOfViewRef = createRef<HTMLDivElement>();
 
   const { container, baseElement } = render(
     <Provider store={store}>
-      <TraceViewContainer
-        exploreId="left"
-        dataFrames={frames}
-        splitOpenFn={() => {}}
-        queryResponse={mockPanelData}
-        topOfViewRef={topOfViewRef}
-      />
+      <TraceViewContainer exploreId="left" dataFrames={frames} splitOpenFn={() => {}} />
     </Provider>
   );
   return {
@@ -47,14 +32,9 @@ function renderTraceViewContainer(frames = [frameOld]) {
 
 describe('TraceViewContainer', () => {
   let user: ReturnType<typeof userEvent.setup>;
+
   beforeEach(() => {
-    jest.useFakeTimers();
-    // Need to use delay: null here to work with fakeTimers
-    // see https://github.com/testing-library/user-event/issues/833
-    user = userEvent.setup({ delay: null });
-  });
-  afterEach(() => {
-    jest.useRealTimers();
+    user = userEvent.setup();
   });
 
   it('toggles children visibility', async () => {
@@ -145,7 +125,7 @@ describe('TraceViewContainer', () => {
     await user.click(tagOption);
 
     expect(screen.queryAllByText('', { selector: 'div[data-testid="span-view"]' }).length).toBe(3);
-    const matchesSwitch = screen.getByRole('checkbox', { name: 'Show matches only switch' });
+    const matchesSwitch = screen.getByRole('switch', { name: 'Show matches only switch' });
     expect(matchesSwitch).toBeInTheDocument();
     await user.click(matchesSwitch);
     expect(screen.queryAllByText('', { selector: 'div[data-testid="span-view"]' }).length).toBe(1);

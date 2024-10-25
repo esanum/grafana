@@ -1,15 +1,16 @@
 import { css, cx } from '@emotion/css';
-import React, { ReactNode } from 'react';
+import { memo, Children, ReactNode } from 'react';
 
 import { GrafanaTheme2 } from '@grafana/data';
 import { selectors } from '@grafana/e2e-selectors';
 
-import { Link, ToolbarButtonRow } from '..';
 import { useStyles2 } from '../../themes/ThemeContext';
 import { getFocusStyles } from '../../themes/mixins';
 import { IconName } from '../../types';
 import { Icon } from '../Icon/Icon';
 import { IconButton } from '../IconButton/IconButton';
+import { Link } from '../Link/Link';
+import { ToolbarButtonRow } from '../ToolbarButton/ToolbarButtonRow';
 
 export interface Props {
   pageIcon?: IconName;
@@ -33,7 +34,7 @@ export interface Props {
 }
 
 /** @alpha */
-export const PageToolbar = React.memo(
+export const PageToolbar = memo(
   ({
     title,
     section,
@@ -72,7 +73,12 @@ export const PageToolbar = React.memo(
     const titleEl = (
       <>
         <span className={styles.truncateText}>{title}</span>
-        {section && <span className={styles.pre}> / {section}</span>}
+        {section && (
+          <span className={styles.pre}>
+            {' / '}
+            {section}
+          </span>
+        )}
       </>
     );
 
@@ -91,7 +97,7 @@ export const PageToolbar = React.memo(
                 tooltip="Go back (Esc)"
                 tooltipPlacement="bottom"
                 size="xxl"
-                aria-label={selectors.components.BackButton.backArrow}
+                data-testid={selectors.components.BackButton.backArrow}
                 onClick={onGoBack}
               />
             </div>
@@ -108,7 +114,7 @@ export const PageToolbar = React.memo(
                 </Link>
                 {titleHref && (
                   <span className={cx(styles.titleText, styles.titleDivider)} aria-hidden>
-                    /
+                    {'/'}
                   </span>
                 )}
               </>
@@ -145,7 +151,7 @@ export const PageToolbar = React.memo(
           </nav>
         </div>
         <ToolbarButtonRow alignment={buttonOverflowAlignment}>
-          {React.Children.toArray(children).filter(Boolean)}
+          {Children.toArray(children).filter(Boolean)}
         </ToolbarButtonRow>
       </nav>
     );
@@ -221,7 +227,6 @@ const getStyles = (theme: GrafanaTheme2) => {
       display: 'flex',
       fontSize: typography.size.lg,
       margin: 0,
-      maxWidth: '300px',
       borderRadius: theme.shape.radius.default,
     }),
     titleLink: css({

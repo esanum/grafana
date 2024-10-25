@@ -10,6 +10,9 @@ import {
   PanelData,
   standardTransformers,
   preProcessPanelData,
+  DataLinkConfigOrigin,
+  getRawDisplayProcessor,
+  DataSourceApi,
 } from '@grafana/data';
 import { config } from '@grafana/runtime';
 import { DataQuery } from '@grafana/schema';
@@ -93,14 +96,45 @@ export const decorateWithFrameTypeMetadata = (data: PanelData): ExplorePanelData
 };
 
 export const decorateWithCorrelations = ({
+  showCorrelationEditorLinks,
   queries,
   correlations,
+  defaultTargetDatasource,
 }: {
+  showCorrelationEditorLinks: boolean;
   queries: DataQuery[] | undefined;
   correlations: CorrelationData[] | undefined;
+  defaultTargetDatasource?: DataSourceApi;
 }) => {
   return (data: PanelData): PanelData => {
-    if (queries?.length && correlations?.length) {
+    if (showCorrelationEditorLinks && defaultTargetDatasource) {
+      for (const frame of data.series) {
+        for (const field of frame.fields) {
+          field.config.links = []; // hide all previous links, we only want to show fake correlations in this view
+
+          field.display = field.display || getRawDisplayProcessor();
+
+          const availableVars: Record<string, string> = {};
+          frame.fields.map((field) => {
+            availableVars[`${field.name}`] = "${__data.fields.['" + `${field.name}` + `']}`;
+          });
+
+          field.config.links.push({
+            url: '',
+            origin: DataLinkConfigOrigin.ExploreCorrelationsEditor,
+            title: `Correlate with ${field.name}`,
+            internal: {
+              datasourceUid: defaultTargetDatasource.uid,
+              datasourceName: defaultTargetDatasource.name,
+              query: { datasource: { uid: defaultTargetDatasource.uid } },
+            },
+            meta: {
+              correlationData: { resultField: field.name, vars: availableVars, origVars: availableVars },
+            },
+          });
+        }
+      }
+    } else if (queries?.length && correlations?.length) {
       const queryRefIdToDataSourceUid = mapValues(groupBy(queries, 'refId'), '0.datasource.uid');
       attachCorrelationsToDataFrames(data.series, correlations, queryRefIdToDataSourceUid);
     }
@@ -230,6 +264,7 @@ export const decorateWithLogsResult =
       absoluteRange?: AbsoluteTimeRange;
       refreshInterval?: string;
       queries?: DataQuery[];
+      deduplicate?: boolean;
     } = {}
   ) =>
   (data: ExplorePanelData): ExplorePanelData => {
@@ -238,7 +273,13 @@ export const decorateWithLogsResult =
     }
 
     const intervalMs = data.request?.intervalMs;
-    const newResults = dataFrameToLogsModel(data.logsFrames, intervalMs, options.absoluteRange, options.queries);
+    const newResults = dataFrameToLogsModel(
+      data.logsFrames,
+      intervalMs,
+      options.absoluteRange,
+      options.queries,
+      options.deduplicate
+    );
     const sortOrder = refreshIntervalToSortOrder(options.refreshInterval);
     const sortedNewResults = sortLogsResult(newResults, sortOrder);
     const rows = sortedNewResults.rows;
@@ -252,17 +293,25 @@ export const decorateWithLogsResult =
 export function decorateData(
   data: PanelData,
   queryResponse: PanelData,
-  absoluteRange: AbsoluteTimeRange,
-  refreshInterval: string | undefined,
+  logsResultDecorator: (data: ExplorePanelData) => ExplorePanelData,
   queries: DataQuery[] | undefined,
-  correlations: CorrelationData[] | undefined
+  correlations: CorrelationData[] | undefined,
+  showCorrelationEditorLinks: boolean,
+  defaultCorrelationTargetDatasource?: DataSourceApi
 ): Observable<ExplorePanelData> {
   return of(data).pipe(
     map((data: PanelData) => preProcessPanelData(data, queryResponse)),
-    map(decorateWithCorrelations({ queries, correlations })),
+    map(
+      decorateWithCorrelations({
+        defaultTargetDatasource: defaultCorrelationTargetDatasource,
+        showCorrelationEditorLinks,
+        queries,
+        correlations,
+      })
+    ),
     map(decorateWithFrameTypeMetadata),
     map(decorateWithGraphResult),
-    map(decorateWithLogsResult({ absoluteRange, refreshInterval, queries })),
+    map(logsResultDecorator),
     mergeMap(decorateWithRawPrometheusResult),
     mergeMap(decorateWithTableResult)
   );

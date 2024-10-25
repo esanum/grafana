@@ -1,23 +1,24 @@
 import { css } from '@emotion/css';
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useMedia } from 'react-use';
 
-import { GrafanaTheme2 } from '@grafana/data/src';
+import { GrafanaTheme2 } from '@grafana/data';
 import { selectors as e2eSelectors } from '@grafana/e2e-selectors/src';
-import { reportInteraction } from '@grafana/runtime';
+import { config, reportInteraction } from '@grafana/runtime';
 import {
-  LinkButton,
-  useStyles2,
-  Spinner,
   Card,
-  useTheme2,
-  Tooltip,
-  Icon,
-  Switch,
-  Pagination,
+  EmptyState,
   HorizontalGroup,
-} from '@grafana/ui/src';
+  LinkButton,
+  Pagination,
+  Spinner,
+  Switch,
+  TextLink,
+  useStyles2,
+  useTheme2,
+} from '@grafana/ui';
 import { Page } from 'app/core/components/Page/Page';
+import { t, Trans } from 'app/core/internationalization';
 import { contextSrv } from 'app/core/services/context_srv';
 import {
   useListPublicDashboardsQuery,
@@ -27,7 +28,6 @@ import {
   generatePublicDashboardConfigUrl,
   generatePublicDashboardUrl,
 } from 'app/features/dashboard/components/ShareModal/SharePublicDashboard/SharePublicDashboardUtils';
-import { isOrgAdmin } from 'app/features/plugins/admin/permissions';
 import { AccessControlAction } from 'app/types';
 
 import { PublicDashboardListResponse } from '../../types';
@@ -42,8 +42,7 @@ const PublicDashboardCard = ({ pd }: { pd: PublicDashboardListResponse }) => {
   const [update, { isLoading: isUpdateLoading }] = useUpdatePublicDashboardMutation();
 
   const selectors = e2eSelectors.pages.PublicDashboards;
-  const hasWritePermissions = contextSrv.hasAccess(AccessControlAction.DashboardsPublicWrite, isOrgAdmin());
-  const isOrphaned = !pd.dashboardUid;
+  const hasWritePermissions = contextSrv.hasPermission(AccessControlAction.DashboardsPublicWrite);
 
   const onTogglePause = (pd: PublicDashboardListResponse, isPaused: boolean) => {
     const req = {
@@ -59,25 +58,21 @@ const PublicDashboardCard = ({ pd }: { pd: PublicDashboardListResponse }) => {
 
   const CardActions = useMemo(() => (isMobile ? Card.Actions : Card.SecondaryActions), [isMobile]);
 
+  const isNewSharingComponentEnabled = config.featureToggles.newDashboardSharingComponent;
+  const translatedPauseSharingText = isNewSharingComponentEnabled
+    ? t('shared-dashboard-list.toggle.pause-sharing-toggle-text', 'Pause access')
+    : t('public-dashboard-list.toggle.pause-sharing-toggle-text', 'Pause sharing');
+
   return (
-    <Card className={styles.card} href={!isOrphaned ? `/d/${pd.dashboardUid}` : undefined}>
+    <Card className={styles.card} href={`/d/${pd.dashboardUid}`}>
       <Card.Heading className={styles.heading}>
-        {!isOrphaned ? (
-          <span>{pd.title}</span>
-        ) : (
-          <Tooltip content="The linked dashboard has already been deleted" placement="top">
-            <div className={styles.orphanedTitle}>
-              <span>Orphaned public dashboard</span>
-              <Icon name="info-circle" />
-            </div>
-          </Tooltip>
-        )}
+        <span>{pd.title}</span>
       </Card.Heading>
       <CardActions className={styles.actions}>
         <div className={styles.pauseSwitch}>
           <Switch
             value={!pd.isEnabled}
-            label="Pause sharing"
+            label={translatedPauseSharingText}
             disabled={isUpdateLoading}
             onChange={(e) => {
               reportInteraction('grafana_dashboards_public_enable_clicked', {
@@ -87,10 +82,9 @@ const PublicDashboardCard = ({ pd }: { pd: PublicDashboardListResponse }) => {
             }}
             data-testid={selectors.ListItem.pauseSwitch}
           />
-          <span>Pause sharing</span>
+          <span>{translatedPauseSharingText}</span>
         </div>
         <LinkButton
-          disabled={isOrphaned}
           fill="text"
           icon="external-link-alt"
           variant="secondary"
@@ -98,18 +92,25 @@ const PublicDashboardCard = ({ pd }: { pd: PublicDashboardListResponse }) => {
           color={theme.colors.warning.text}
           href={generatePublicDashboardUrl(pd.accessToken)}
           key="public-dashboard-url"
-          tooltip="View public dashboard"
+          tooltip={
+            isNewSharingComponentEnabled
+              ? t('shared-dashboard-list.button.view-button-tooltip', 'View shared dashboard')
+              : t('public-dashboard-list.button.view-button-tooltip', 'View public dashboard')
+          }
           data-testid={selectors.ListItem.linkButton}
         />
         <LinkButton
-          disabled={isOrphaned}
           fill="text"
           icon="cog"
           variant="secondary"
           color={theme.colors.warning.text}
-          href={generatePublicDashboardConfigUrl(pd.dashboardUid)}
+          href={generatePublicDashboardConfigUrl(pd.dashboardUid, pd.slug)}
           key="public-dashboard-config-url"
-          tooltip="Configure public dashboard"
+          tooltip={
+            isNewSharingComponentEnabled
+              ? t('shared-dashboard-list.button.config-button-tooltip', 'Configure shared dashboard')
+              : t('public-dashboard-list.button.config-button-tooltip', 'Configure public dashboard')
+          }
           data-testid={selectors.ListItem.configButton}
         />
         {hasWritePermissions && (
@@ -118,7 +119,11 @@ const PublicDashboardCard = ({ pd }: { pd: PublicDashboardListResponse }) => {
             icon="trash-alt"
             variant="secondary"
             publicDashboard={pd}
-            tooltip="Revoke public dashboard url"
+            tooltip={
+              isNewSharingComponentEnabled
+                ? t('shared-dashboard-list.button.revoke-button-tooltip', 'Revoke access')
+                : t('public-dashboard-list.button.revoke-button-tooltip', 'Revoke public dashboard URL')
+            }
             loader={<Spinner />}
             data-testid={selectors.ListItem.trashcanButton}
           />
@@ -132,28 +137,70 @@ export const PublicDashboardListTable = () => {
   const [page, setPage] = useState(1);
 
   const styles = useStyles2(getStyles);
-  const { data: paginatedPublicDashboards, isLoading, isFetching, isError } = useListPublicDashboardsQuery(page);
+  const { data: paginatedPublicDashboards, isLoading, isError } = useListPublicDashboardsQuery(page);
 
   return (
-    <Page navId="dashboards/public" actions={isFetching && <Spinner />}>
+    <Page navId="dashboards/public">
       <Page.Contents isLoading={isLoading}>
         {!isLoading && !isError && !!paginatedPublicDashboards && (
           <div>
-            <ul className={styles.list}>
-              {paginatedPublicDashboards.publicDashboards.map((pd: PublicDashboardListResponse) => (
-                <li key={pd.uid}>
-                  <PublicDashboardCard pd={pd} />
-                </li>
-              ))}
-            </ul>
-            <HorizontalGroup justify="flex-end">
-              <Pagination
-                onNavigate={setPage}
-                currentPage={paginatedPublicDashboards.page}
-                numberOfPages={paginatedPublicDashboards.totalPages}
-                hideWhenSinglePage
-              />
-            </HorizontalGroup>
+            {paginatedPublicDashboards.publicDashboards.length === 0 ? (
+              config.featureToggles.newDashboardSharingComponent ? (
+                <EmptyState
+                  variant="call-to-action"
+                  message={t(
+                    'shared-dashboard-list.empty-state.message',
+                    "You haven't created any shared dashboards yet"
+                  )}
+                >
+                  <Trans i18nKey="shared-dashboard-list.empty-state.more-info">
+                    Create a shared dashboard from any existing dashboard through the <b>Share</b> modal.{' '}
+                    <TextLink
+                      external
+                      href="https://grafana.com/docs/grafana/latest/dashboards/share-dashboards-panels/shared-dashboards"
+                    >
+                      Learn more
+                    </TextLink>
+                  </Trans>
+                </EmptyState>
+              ) : (
+                <EmptyState
+                  variant="call-to-action"
+                  message={t(
+                    'public-dashboard-list.empty-state.message',
+                    "You haven't created any public dashboards yet"
+                  )}
+                >
+                  <Trans i18nKey="public-dashboard-list.empty-state.more-info">
+                    Create a public dashboard from any existing dashboard through the <b>Share</b> modal.{' '}
+                    <TextLink
+                      external
+                      href="https://grafana.com/docs/grafana/latest/dashboards/dashboard-public/#make-a-dashboard-public"
+                    >
+                      Learn more
+                    </TextLink>
+                  </Trans>
+                </EmptyState>
+              )
+            ) : (
+              <>
+                <ul className={styles.list}>
+                  {paginatedPublicDashboards.publicDashboards.map((pd: PublicDashboardListResponse) => (
+                    <li key={pd.uid}>
+                      <PublicDashboardCard pd={pd} />
+                    </li>
+                  ))}
+                </ul>
+                <HorizontalGroup justify="flex-end">
+                  <Pagination
+                    onNavigate={setPage}
+                    currentPage={paginatedPublicDashboards.page}
+                    numberOfPages={paginatedPublicDashboards.totalPages}
+                    hideWhenSinglePage
+                  />
+                </HorizontalGroup>
+              </>
+            )}
           </div>
         )}
       </Page.Contents>

@@ -25,6 +25,10 @@ title: Data source HTTP API
 
 `GET /api/datasources`
 
+{{% admonition type="warning" %}}
+This API currently doesn't handle pagination. The default maximum number of data sources returned is 5000. You can change this value in the default.ini file.
+{{% /admonition %}}
+
 **Required permissions**
 
 See note in the [introduction]({{< ref "#data-source-api" >}}) for an explanation.
@@ -600,7 +604,7 @@ Content-Type: application/json
 ```
 
 {{% admonition type="note" %}}
-Similar to [creating a data source](#create-a-data-source), `password` and `basicAuthPassword` should be defined under `secureJsonData` in order to be stored securely as an encrypted blob in the database. Then, the encrypted fields are listed under `secureJsonFields` section in the response.## Update an existing data source by id
+Similar to [creating a data source](#create-a-data-source), `password` and `basicAuthPassword` should be defined under `secureJsonData` in order to be stored securely as an encrypted blob in the database. Then, the encrypted fields are listed under `secureJsonFields` section in the response.
 {{% /admonition %}}
 
 ## Delete an existing data source by id
@@ -908,10 +912,10 @@ Content-Type: application/json
          "datasource":{
             "uid":"PD8C576611E62080A"
          },
-         "format": "table"
+         "format": "table",
          "maxDataPoints":1848,
          "intervalMs":200,
-         "stringInput":"1,20,90,30,5,0",
+         "stringInput":"1,20,90,30,5,0"
       }
    ],
    "from":"now-5m",

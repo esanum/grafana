@@ -1,9 +1,7 @@
 import { Meta, StoryFn } from '@storybook/react';
-import React from 'react';
 
 import { Input, Form, FieldSet, Field } from '@grafana/ui';
 
-import { withCenteredStory } from '../../utils/storybook/withCenteredStory';
 import { Button } from '../Button';
 
 import { Props } from './FieldSet';
@@ -12,7 +10,6 @@ import mdx from './FieldSet.mdx';
 const meta: Meta<typeof FieldSet> = {
   title: 'Forms/FieldSet',
   component: FieldSet,
-  decorators: [withCenteredStory],
   args: {
     label: 'Default label',
   },

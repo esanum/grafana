@@ -1,6 +1,7 @@
 import { css, cx } from '@emotion/css';
-import React, { CSSProperties, ReactElement, ReactNode } from 'react';
-import { useMeasure } from 'react-use';
+import { CSSProperties, ReactElement, ReactNode, useId } from 'react';
+import * as React from 'react';
+import { useMeasure, useToggle } from 'react-use';
 
 import { GrafanaTheme2, LoadingState } from '@grafana/data';
 import { selectors } from '@grafana/e2e-selectors';
@@ -10,6 +11,7 @@ import { getFocusStyles } from '../../themes/mixins';
 import { DelayRender } from '../../utils/DelayRender';
 import { Icon } from '../Icon/Icon';
 import { LoadingBar } from '../LoadingBar/LoadingBar';
+import { Text } from '../Text/Text';
 import { Tooltip } from '../Tooltip';
 
 import { HoverWidget } from './HoverWidget';
@@ -21,17 +23,16 @@ import { TitleItem } from './TitleItem';
 /**
  * @internal
  */
-export type PanelChromeProps = FixedDimensions | AutoSize;
+export type PanelChromeProps = (AutoSize | FixedDimensions) & (Collapsible | HoverHeader);
+
 interface BaseProps {
   padding?: PanelPadding;
-  hoverHeaderOffset?: number;
-  title?: string;
+  title?: string | React.ReactElement;
   description?: string | (() => string);
   titleItems?: ReactNode;
   menu?: ReactElement | (() => ReactElement);
   dragClass?: string;
   dragClassCancel?: string;
-  hoverHeader?: boolean;
   /**
    * Use only to indicate loading or streaming data in the panel.
    * Any other values of loadingState are ignored.
@@ -56,6 +57,15 @@ interface BaseProps {
    * callback when opening the panel menu
    */
   onOpenMenu?: () => void;
+  /**
+   * Used for setting panel attention
+   */
+  onFocus?: () => void;
+  /**
+   * Debounce the event handler, if possible
+   */
+  onMouseMove?: () => void;
+  onMouseEnter?: () => void;
 }
 
 interface FixedDimensions extends BaseProps {
@@ -68,6 +78,25 @@ interface AutoSize extends BaseProps {
   width?: never;
   height?: never;
   children: ReactNode;
+}
+
+interface Collapsible {
+  collapsible: boolean;
+  collapsed?: boolean;
+  /**
+   * callback when collapsing or expanding the panel
+   */
+  onToggleCollapse?: (collapsed: boolean) => void;
+  hoverHeader?: never;
+  hoverHeaderOffset?: never;
+}
+
+interface HoverHeader {
+  collapsible?: never;
+  collapsed?: never;
+  onToggleCollapse?: never;
+  hoverHeader?: boolean;
+  hoverHeaderOffset?: number;
 }
 
 /**
@@ -99,29 +128,47 @@ export function PanelChrome({
   actions,
   onCancelQuery,
   onOpenMenu,
+  collapsible = false,
+  collapsed,
+  onToggleCollapse,
+  onFocus,
+  onMouseMove,
+  onMouseEnter,
 }: PanelChromeProps) {
   const theme = useTheme2();
   const styles = useStyles2(getStyles);
+  const panelContentId = useId();
+  const panelTitleId = useId().replace(/:/g, '_');
 
   const hasHeader = !hoverHeader;
 
+  const [isOpen, toggleOpen] = useToggle(true);
+
+  // if collapsed is not defined, then component is uncontrolled and state is managed internally
+  if (collapsed === undefined) {
+    collapsed = !isOpen;
+  }
+
   // hover menu is only shown on hover when not on touch devices
   const showOnHoverClass = 'show-on-hover';
+  const isPanelTransparent = displayMode === 'transparent';
 
   const headerHeight = getHeaderHeight(theme, hasHeader);
-  const { contentStyle, innerWidth, innerHeight } = getContentStyle(padding, theme, headerHeight, height, width);
+  const { contentStyle, innerWidth, innerHeight } = getContentStyle(
+    padding,
+    theme,
+    headerHeight,
+    collapsed,
+    height,
+    width
+  );
 
   const headerStyles: CSSProperties = {
     height: headerHeight,
     cursor: dragClass ? 'move' : 'auto',
   };
 
-  const containerStyles: CSSProperties = { width, height };
-  if (displayMode === 'transparent') {
-    containerStyles.backgroundColor = 'transparent';
-    containerStyles.border = 'none';
-  }
-
+  const containerStyles: CSSProperties = { width, height: collapsed ? undefined : height };
   const [ref, { width: loadingBarWidth }] = useMeasure<HTMLDivElement>();
 
   /** Old property name now maps to actions */
@@ -129,14 +176,52 @@ export function PanelChrome({
     actions = leftItems;
   }
 
-  const testid = title ? selectors.components.Panels.Panel.title(title) : 'Panel';
+  const testid = typeof title === 'string' ? selectors.components.Panels.Panel.title(title) : 'Panel';
 
   const headerContent = (
     <>
-      {title && (
-        <h6 title={title} className={styles.title}>
-          {title}
-        </h6>
+      {/* Non collapsible title */}
+      {!collapsible && title && (
+        <div className={styles.title}>
+          <Text
+            element="h2"
+            variant="h6"
+            truncate
+            title={typeof title === 'string' ? title : undefined}
+            id={panelTitleId}
+          >
+            {title}
+          </Text>
+        </div>
+      )}
+
+      {/* Collapsible title */}
+      {collapsible && (
+        <div className={styles.title}>
+          <Text element="h2" variant="h6">
+            <button
+              type="button"
+              className={styles.clearButtonStyles}
+              onClick={() => {
+                toggleOpen();
+                if (onToggleCollapse) {
+                  onToggleCollapse(!collapsed);
+                }
+              }}
+              aria-expanded={!collapsed}
+              aria-controls={!collapsed ? panelContentId : undefined}
+            >
+              <Icon
+                name={!collapsed ? 'angle-down' : 'angle-right'}
+                aria-hidden={!!title}
+                aria-label={!title ? 'toggle collapse panel' : undefined}
+              />
+              <Text variant="h6" truncate id={panelTitleId}>
+                {title}
+              </Text>
+            </button>
+          </Text>
+        </div>
       )}
 
       <div className={cx(styles.titleItems, dragClassCancel)} data-testid="title-items-container">
@@ -171,8 +256,17 @@ export function PanelChrome({
 
   return (
     // tabIndex={0} is needed for keyboard accessibility in the plot area
-    // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
-    <div className={styles.container} style={containerStyles} data-testid={testid} tabIndex={0} ref={ref}>
+    <section
+      className={cx(styles.container, { [styles.transparentContainer]: isPanelTransparent })}
+      style={containerStyles}
+      aria-labelledby={!!title ? panelTitleId : undefined}
+      data-testid={testid}
+      tabIndex={0} // eslint-disable-line jsx-a11y/no-noninteractive-tabindex
+      onFocus={onFocus}
+      onMouseMove={onMouseMove}
+      onMouseEnter={onMouseEnter}
+      ref={ref}
+    >
       <div className={styles.loadingBarContainer}>
         {loadingState === LoadingState.Loading ? (
           <LoadingBar width={loadingBarWidth} ariaLabel="Panel loading bar" />
@@ -183,7 +277,7 @@ export function PanelChrome({
         <>
           <HoverWidget
             menu={menu}
-            title={title}
+            title={typeof title === 'string' ? title : undefined}
             offset={hoverHeaderOffset}
             dragClass={dragClass}
             onOpenMenu={onOpenMenu}
@@ -212,7 +306,7 @@ export function PanelChrome({
           {menu && (
             <PanelMenu
               menu={menu}
-              title={title}
+              title={typeof title === 'string' ? title : undefined}
               placement="bottom-end"
               menuButtonClass={cx(styles.menuItem, dragClassCancel, showOnHoverClass)}
               onOpenMenu={onOpenMenu}
@@ -221,10 +315,17 @@ export function PanelChrome({
         </div>
       )}
 
-      <div className={cx(styles.content, height === undefined && styles.containNone)} style={contentStyle}>
-        {typeof children === 'function' ? children(innerWidth, innerHeight) : children}
-      </div>
-    </div>
+      {!collapsed && (
+        <div
+          id={panelContentId}
+          data-testid={selectors.components.Panels.Panel.content}
+          className={cx(styles.content, height === undefined && styles.containNone)}
+          style={contentStyle}
+        >
+          {typeof children === 'function' ? children(innerWidth, innerHeight) : children}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -245,6 +346,7 @@ const getContentStyle = (
   padding: string,
   theme: GrafanaTheme2,
   headerHeight: number,
+  collapsed: boolean,
   height?: number,
   width?: number
 ) => {
@@ -258,14 +360,18 @@ const getContentStyle = (
     innerWidth = width - panelPadding - panelBorder;
   }
 
-  const contentStyle: CSSProperties = {
-    padding: chromePadding,
-  };
-
   let innerHeight = 0;
   if (height) {
     innerHeight = height - headerHeight - panelPadding - panelBorder;
   }
+
+  if (collapsed) {
+    innerHeight = headerHeight;
+  }
+
+  const contentStyle: CSSProperties = {
+    padding: chromePadding,
+  };
 
   return { contentStyle, innerWidth, innerHeight };
 };
@@ -279,7 +385,7 @@ const getStyles = (theme: GrafanaTheme2) => {
       backgroundColor: background,
       border: `1px solid ${borderColor}`,
       position: 'relative',
-      borderRadius: theme.shape.borderRadius(1),
+      borderRadius: theme.shape.radius.default,
       height: '100%',
       display: 'flex',
       flexDirection: 'column',
@@ -307,12 +413,24 @@ const getStyles = (theme: GrafanaTheme2) => {
         },
       },
     }),
+    transparentContainer: css({
+      label: 'panel-transparent-container',
+      backgroundColor: 'transparent',
+      border: '1px solid transparent',
+      boxSizing: 'border-box',
+      '&:hover': {
+        border: `1px solid ${borderColor}`,
+      },
+    }),
     loadingBarContainer: css({
       label: 'panel-loading-bar-container',
       position: 'absolute',
       top: 0,
       width: '100%',
-      overflow: 'hidden',
+      // this is to force the loading bar container to create a new stacking context
+      // otherwise, in webkit browsers on windows/linux, the aliasing of panel text changes when the loading bar is shown
+      // see https://github.com/grafana/grafana/issues/88104
+      zIndex: 1,
     }),
     containNone: css({
       contain: 'none',
@@ -320,7 +438,7 @@ const getStyles = (theme: GrafanaTheme2) => {
     content: css({
       label: 'panel-content',
       flexGrow: 1,
-      contain: 'strict',
+      contain: 'size layout',
     }),
     headerContainer: css({
       label: 'panel-header',
@@ -341,13 +459,12 @@ const getStyles = (theme: GrafanaTheme2) => {
     }),
     title: css({
       label: 'panel-title',
-      marginBottom: 0, // override default h6 margin-bottom
+      display: 'flex',
       padding: theme.spacing(0, padding),
-      textOverflow: 'ellipsis',
-      overflow: 'hidden',
-      whiteSpace: 'nowrap',
-      fontSize: theme.typography.h6.fontSize,
-      fontWeight: theme.typography.h6.fontWeight,
+      minWidth: 0,
+      '& > h2': {
+        minWidth: 0,
+      },
     }),
     items: css({
       display: 'flex',
@@ -373,7 +490,7 @@ const getStyles = (theme: GrafanaTheme2) => {
       position: 'absolute',
       left: 0,
       top: 0,
-      zIndex: theme.zIndex.tooltip,
+      zIndex: 1,
     }),
     rightActions: css({
       display: 'flex',
@@ -389,6 +506,15 @@ const getStyles = (theme: GrafanaTheme2) => {
     titleItems: css({
       display: 'flex',
       height: '100%',
+    }),
+    clearButtonStyles: css({
+      alignItems: 'center',
+      display: 'flex',
+      gap: theme.spacing(0.5),
+      background: 'transparent',
+      border: 'none',
+      padding: 0,
+      maxWidth: '100%',
     }),
   };
 };

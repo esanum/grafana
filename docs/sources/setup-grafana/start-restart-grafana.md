@@ -33,12 +33,11 @@ Complete the following steps to start the Grafana server using systemd and verif
    ```bash
    sudo systemctl daemon-reload
    sudo systemctl start grafana-server
-   sudo systemctl status grafana-server
    ```
 
 1. To verify that the service is running, run the following command:
 
-   ```
+   ```bash
    sudo systemctl status grafana-server
    ```
 
@@ -52,11 +51,11 @@ sudo systemctl enable grafana-server.service
 
 #### Serve Grafana on a port < 1024
 
-{{< docs/shared "systemd/bind-net-capabilities.md" >}}
+{{< docs/shared lookup="systemd/bind-net-capabilities.md" source="grafana" version="<GRAFANA VERSION>" >}}
 
 ### Restart the Grafana server using systemd
 
-To restart the Grafana server, run the following commands:
+To restart the Grafana server, run the following command:
 
 ```bash
 sudo systemctl restart grafana-server
@@ -70,16 +69,15 @@ SUSE or openSUSE users might need to start the server with the systemd method, t
 
 Complete the following steps to start the Grafana server using init.d and verify that it is running:
 
-1. To start the Grafana server, run the following commands:
+1. To start the Grafana server, run the following command:
 
    ```bash
    sudo service grafana-server start
-   sudo service grafana-server status
    ```
 
 1. To verify that the service is running, run the following command:
 
-   ```
+   ```bash
    sudo service grafana-server status
    ```
 
@@ -93,7 +91,7 @@ sudo update-rc.d grafana-server defaults
 
 #### Restart the Grafana server using init.d
 
-To restart the Grafana server, run the following commands:
+To restart the Grafana server, run the following command:
 
 ```bash
 sudo service grafana-server restart
@@ -121,8 +119,8 @@ Alternatively, you can use the `docker compose restart` command to restart Grafa
 
 Configure your `docker-compose.yml` file. For example:
 
-```bash
-version: "3.8"
+```yml
+version: '3.8'
 services:
   grafana:
     image: grafana/grafana:latest
@@ -180,6 +178,14 @@ To restart the Grafana server, complete the following steps:
 ## macOS
 
 Restart methods differ depending on whether you installed Grafana using Homebrew or as standalone macOS binaries.
+
+### Start Grafana using Homebrew
+
+To start Grafana using [Homebrew](http://brew.sh/), run the following start command:
+
+```bash
+brew services start grafana
+```
 
 ### Restart Grafana using Homebrew
 

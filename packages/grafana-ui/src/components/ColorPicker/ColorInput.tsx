@@ -1,6 +1,7 @@
 import { cx, css } from '@emotion/css';
 import { debounce } from 'lodash';
-import React, { forwardRef, useState, useEffect, useMemo } from 'react';
+import { forwardRef, useState, useEffect, useMemo } from 'react';
+import * as React from 'react';
 import tinycolor from 'tinycolor2';
 
 import { GrafanaTheme2 } from '@grafana/data';
@@ -104,6 +105,6 @@ const getColorPreviewStyles = (theme: GrafanaTheme2) =>
   css({
     height: '100%',
     width: `${theme.spacing.gridSize * 4}px`,
-    borderRadius: `${theme.shape.borderRadius()} 0 0 ${theme.shape.borderRadius()}`,
+    borderRadius: `${theme.shape.radius.default} 0 0 ${theme.shape.radius.default}`,
     border: `1px solid ${theme.colors.border.medium}`,
   });

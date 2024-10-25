@@ -1,6 +1,8 @@
 import { css } from '@emotion/css';
 import { cloneDeep } from 'lodash';
-import React, { ChangeEvent, useState } from 'react';
+import * as React from 'react';
+import { ChangeEvent, useState } from 'react';
+import { useFormContext } from 'react-hook-form';
 
 import {
   CoreApp,
@@ -12,21 +14,25 @@ import {
   RelativeTimeRange,
   ThresholdsConfig,
 } from '@grafana/data';
-import { Stack } from '@grafana/experimental';
 import { DataQuery } from '@grafana/schema';
-import { GraphTresholdsStyleMode, Icon, InlineFormLabel, Input, Tooltip, useStyles2 } from '@grafana/ui';
+import { GraphThresholdsStyleMode, Icon, InlineField, Input, Stack, Tooltip, useStyles2 } from '@grafana/ui';
+import { logInfo } from 'app/features/alerting/unified/Analytics';
 import { QueryEditorRow } from 'app/features/query/components/QueryEditorRow';
-import { AlertQuery } from 'app/types/unified-alerting-dto';
+import { AlertDataQuery, AlertQuery } from 'app/types/unified-alerting-dto';
 
-import { AlertConditionIndicator } from '../expressions/AlertConditionIndicator';
+import { RuleFormValues } from '../../types/rule-form';
+import { msToSingleUnitDuration } from '../../utils/time';
+import { ExpressionStatusIndicator } from '../expressions/ExpressionStatusIndicator';
 
 import { QueryOptions } from './QueryOptions';
 import { VizWrapper } from './VizWrapper';
 
 export const DEFAULT_MAX_DATA_POINTS = 43200;
+export const DEFAULT_MIN_INTERVAL = '1s';
 
 export interface AlertQueryOptions {
   maxDataPoints?: number | undefined;
+  minInterval?: string | undefined;
 }
 
 interface Props {
@@ -43,7 +49,7 @@ interface Props {
   onRunQueries: () => void;
   index: number;
   thresholds: ThresholdsConfig;
-  thresholdsType?: GraphTresholdsStyleMode;
+  thresholdsType?: GraphThresholdsStyleMode;
   onChangeThreshold?: (thresholds: ThresholdsConfig, index: number) => void;
   condition: string | null;
   onSetCondition: (refId: string) => void;
@@ -74,10 +80,26 @@ export const QueryWrapper = ({
   const [dsInstance, setDsInstance] = useState<DataSourceApi>();
   const defaults = dsInstance?.getDefaultQuery ? dsInstance.getDefaultQuery(CoreApp.UnifiedAlerting) : {};
 
+  const { getValues } = useFormContext<RuleFormValues>();
+  const isAdvancedMode = getValues('editorSettings.simplifiedQueryEditor') !== true;
+
   const queryWithDefaults = {
     ...defaults,
     ...cloneDeep(query.model),
   };
+
+  if (queryWithDefaults.datasource && queryWithDefaults.datasource?.uid !== query.datasourceUid) {
+    logInfo('rule query datasource and datasourceUid mismatch', {
+      queryModelDatasourceUid: queryWithDefaults.datasource?.uid || '',
+      queryDatasourceUid: query.datasourceUid,
+      datasourceType: query.model.datasource?.type || 'unknown type',
+    });
+    // There are occasions when the rule query model datasource UID and the datasourceUid do not match
+    // It's unclear as to why this happens, but we need better visibility on why this happens,
+    // so we log when it does, and make the query model datasource UID match the datasource UID
+    // We already elsewhere work under the assumption that the datasource settings are fetched from the datasourceUid property
+    queryWithDefaults.datasource.uid = query.datasourceUid;
+  }
 
   function SelectingDataSourceTooltip() {
     const styles = useStyles2(getStyles);
@@ -106,14 +128,30 @@ export const QueryWrapper = ({
   }
 
   // TODO add a warning label here too when the data looks like time series data and is used as an alert condition
-  function HeaderExtras({ query, error, index }: { query: AlertQuery; error?: Error; index: number }) {
-    const queryOptions: AlertQueryOptions = { maxDataPoints: query.model.maxDataPoints };
+  function HeaderExtras({
+    query,
+    error,
+    index,
+    isAdvancedMode = true,
+  }: {
+    query: AlertQuery<AlertDataQuery>;
+    error?: Error;
+    index: number;
+    isAdvancedMode?: boolean;
+  }) {
+    const queryOptions: AlertQueryOptions = {
+      maxDataPoints: query.model.maxDataPoints,
+      minInterval: query.model.intervalMs ? msToSingleUnitDuration(query.model.intervalMs) : undefined,
+    };
     const alertQueryOptions: AlertQueryOptions = {
       maxDataPoints: queryOptions.maxDataPoints,
+      minInterval: queryOptions.minInterval,
     };
 
+    const isAlertCondition = condition === query.refId;
+
     return (
-      <Stack direction="row" alignItems="baseline" gap={1}>
+      <Stack direction="row" alignItems="center" gap={1}>
         <SelectingDataSourceTooltip />
         <QueryOptions
           onChangeTimeRange={onChangeTimeRange}
@@ -122,23 +160,28 @@ export const QueryWrapper = ({
           onChangeQueryOptions={onChangeQueryOptions}
           index={index}
         />
-
-        <AlertConditionIndicator
-          onSetCondition={() => onSetCondition(query.refId)}
-          enabled={condition === query.refId}
-          error={error}
-        />
+        {isAdvancedMode && (
+          <ExpressionStatusIndicator
+            onSetCondition={() => onSetCondition(query.refId)}
+            isCondition={isAlertCondition}
+          />
+        )}
       </Stack>
     );
   }
 
   const showVizualisation = data.state !== LoadingState.NotStarted;
+  // ⚠️ the query editors want the entire array of queries passed as "DataQuery" NOT "AlertQuery"
+  // TypeScript isn't complaining here because the interfaces just happen to be compatible
+  const editorQueries = cloneDeep(queries.map((query) => query.model));
 
   return (
     <Stack direction="column" gap={0.5}>
       <div className={styles.wrapper}>
-        <QueryEditorRow<DataQuery>
+        <QueryEditorRow<AlertDataQuery>
           alerting
+          hideRefId={!isAdvancedMode}
+          hideActionButtons={!isAdvancedMode}
           collapsable={false}
           dataSource={dsSettings}
           onDataSourceLoaded={setDsInstance}
@@ -152,20 +195,15 @@ export const QueryWrapper = ({
           onRemoveQuery={onRemoveQuery}
           onAddQuery={() => onDuplicateQuery(cloneDeep(query))}
           onRunQuery={onRunQueries}
-          queries={queries}
-          renderHeaderExtras={() => <HeaderExtras query={query} index={index} error={error} />}
+          queries={editorQueries}
+          renderHeaderExtras={() => (
+            <HeaderExtras query={query} index={index} error={error} isAdvancedMode={isAdvancedMode} />
+          )}
           app={CoreApp.UnifiedAlerting}
-          hideDisableQuery={true}
+          hideHideQueryButton={true}
         />
       </div>
-      {showVizualisation && (
-        <VizWrapper
-          data={data}
-          thresholds={thresholds}
-          thresholdsType={thresholdsType}
-          onThresholdsChange={onChangeThreshold ? (thresholds) => onChangeThreshold(thresholds, index) : undefined}
-        />
-      )}
+      {showVizualisation && <VizWrapper data={data} thresholds={thresholds} thresholdsType={thresholdsType} />}
     </Stack>
   );
 };
@@ -198,50 +236,82 @@ export function MaxDataPointsOption({
   };
 
   return (
-    <Stack direction="row" alignItems="baseline" gap={1}>
-      <InlineFormLabel
-        width={8}
-        tooltip={
-          <>
-            The maximum data points per series. Used directly by some data sources and used in calculation of auto
-            interval. With streaming data this value is used for the rolling buffer.
-          </>
-        }
-      >
-        Max data points
-      </InlineFormLabel>
+    <InlineField
+      labelWidth={24}
+      label="Max data points"
+      tooltip="The maximum data points per series. Used directly by some data sources and used in calculation of auto interval. With streaming data this value is used for the rolling buffer."
+    >
       <Input
         type="number"
-        className="width-6"
-        placeholder={DEFAULT_MAX_DATA_POINTS.toLocaleString()}
+        width={10}
+        placeholder={DEFAULT_MAX_DATA_POINTS.toString()}
         spellCheck={false}
         onBlur={onMaxDataPointsBlur}
         defaultValue={value}
       />
-    </Stack>
+    </InlineField>
+  );
+}
+
+export function MinIntervalOption({
+  options,
+  onChange,
+}: {
+  options: AlertQueryOptions;
+  onChange: (options: AlertQueryOptions) => void;
+}) {
+  const value = options.minInterval ?? '';
+
+  const onMinIntervalBlur = (event: ChangeEvent<HTMLInputElement>) => {
+    const minInterval = event.target.value;
+    if (minInterval !== value) {
+      onChange({
+        ...options,
+        minInterval,
+      });
+    }
+  };
+
+  return (
+    <InlineField
+      label="Interval"
+      labelWidth={24}
+      tooltip={
+        <>
+          Interval sent to the data source. Recommended to be set to write frequency, for example <code>1m</code> if
+          your data is written every minute.
+        </>
+      }
+    >
+      <Input
+        type="text"
+        width={10}
+        placeholder={DEFAULT_MIN_INTERVAL}
+        spellCheck={false}
+        onBlur={onMinIntervalBlur}
+        defaultValue={value}
+      />
+    </InlineField>
   );
 }
 
 const getStyles = (theme: GrafanaTheme2) => ({
-  wrapper: css`
-    label: AlertingQueryWrapper;
-    margin-bottom: ${theme.spacing(1)};
-    border: 1px solid ${theme.colors.border.weak};
-    border-radius: ${theme.shape.borderRadius(1)};
+  wrapper: css({
+    label: 'AlertingQueryWrapper',
+    marginBottom: theme.spacing(1),
+    border: `1px solid ${theme.colors.border.weak}`,
+    borderRadius: theme.shape.radius.default,
 
-    button {
-      overflow: visible;
-    }
-  `,
-  queryOptions: css`
-    margin-bottom: -${theme.spacing(2)};
-  `,
-  dsTooltip: css`
-    display: flex;
-    align-items: center;
-    &:hover {
-      opacity: 0.85;
-      cursor: pointer;
-    }
-  `,
+    button: {
+      overflow: 'visible',
+    },
+  }),
+  dsTooltip: css({
+    display: 'flex',
+    alignItems: 'center',
+    '&:hover': {
+      opacity: 0.85,
+      cursor: 'pointer',
+    },
+  }),
 });

@@ -1,6 +1,6 @@
 import { css, cx } from '@emotion/css';
 import { uniqueId } from 'lodash';
-import React, { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 import { GrafanaTheme2, SelectableValue, toIconName } from '@grafana/data';
 
@@ -21,6 +21,7 @@ export interface RadioButtonGroupProps<T> {
   fullWidth?: boolean;
   className?: string;
   autoFocus?: boolean;
+  ['aria-label']?: string;
   invalid?: boolean;
 }
 
@@ -36,6 +37,7 @@ export function RadioButtonGroup<T>({
   className,
   fullWidth = false,
   autoFocus = false,
+  'aria-label': ariaLabel,
   invalid = false,
 }: RadioButtonGroupProps<T>) {
   const handleOnChange = useCallback(
@@ -71,7 +73,11 @@ export function RadioButtonGroup<T>({
   }, [autoFocus]);
 
   return (
-    <div className={cx(styles.radioGroup, fullWidth && styles.fullWidth, invalid && styles.invalid, className)}>
+    <div
+      role="radiogroup"
+      aria-label={ariaLabel}
+      className={cx(styles.radioGroup, fullWidth && styles.fullWidth, invalid && styles.invalid, className)}
+    >
       {options.map((opt, i) => {
         const isItemDisabled = disabledOptions && opt.value && disabledOptions.includes(opt.value);
         const icon = opt.icon ? toIconName(opt.icon) : undefined;
@@ -107,11 +113,12 @@ RadioButtonGroup.displayName = 'RadioButtonGroup';
 const getStyles = (theme: GrafanaTheme2) => {
   return {
     radioGroup: css({
+      backgroundColor: theme.colors.background.primary,
       display: 'inline-flex',
       flexDirection: 'row',
       flexWrap: 'nowrap',
       border: `1px solid ${theme.components.input.borderColor}`,
-      borderRadius: theme.shape.borderRadius(),
+      borderRadius: theme.shape.radius.default,
       padding: '2px',
     }),
     fullWidth: css({

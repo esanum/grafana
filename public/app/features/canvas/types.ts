@@ -1,14 +1,6 @@
 import { LinkModel } from '@grafana/data/src';
-import { ColorDimensionConfig, TextDimensionConfig } from '@grafana/schema';
-import {
-  BackgroundImageSize,
-  Constraint,
-  HorizontalConstraint,
-  Placement,
-  VerticalConstraint,
-  LineConfig,
-  BackgroundConfig,
-} from 'app/plugins/panel/canvas/panelcfg.gen';
+import { ColorDimensionConfig, ResourceDimensionConfig, TextDimensionConfig } from '@grafana/schema';
+import { BackgroundImageSize } from 'app/plugins/panel/canvas/panelcfg.gen';
 
 export enum QuickPlacement {
   Top = 'top',
@@ -38,6 +30,7 @@ export interface TextData {
   align: Align;
   valign: VAlign;
   links?: LinkModel[];
+  field?: string;
 }
 
 export interface TextConfig {
@@ -48,12 +41,24 @@ export interface TextConfig {
   valign: VAlign;
 }
 
-export {
-  Placement,
-  Constraint,
-  HorizontalConstraint,
-  VerticalConstraint,
-  BackgroundImageSize,
-  LineConfig,
-  BackgroundConfig,
-};
+export interface CanvasElementConfig extends TextConfig {
+  backgroundColor?: ColorDimensionConfig;
+  backgroundImage?: ResourceDimensionConfig;
+  backgroundSize?: BackgroundImageSize;
+  borderColor?: ColorDimensionConfig;
+  borderWidth?: number;
+}
+
+export interface CanvasElementData extends TextData {
+  backgroundColor?: string;
+  backgroundImage?: string;
+  backgroundSize?: string;
+  borderColor?: string;
+  borderWidth?: number;
+}
+
+export interface StandardEditorConfig {
+  layout?: boolean;
+  background?: boolean;
+  border?: boolean;
+}
